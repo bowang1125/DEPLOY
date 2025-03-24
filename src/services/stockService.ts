@@ -31,7 +31,6 @@ export const fetchStockData = async (
     // 根據Yahoo Finance API的要求格式化interval
     // 確保格式如 1d, 1h, 15m 等
     if (!interval.match(/^\d+[dhm]$/)) {
-      // 如果格式不正確，使用默認值
       console.warn(`時間間隔格式不正確: ${interval}，使用默認值1d`);
       adjustedInterval = '1d';
     }
@@ -58,17 +57,23 @@ export const fetchStockData = async (
         // 構建完整URL
         const fullUrl = `${proxy}${encodeURIComponent(yahooFinanceUrl)}`;
         
+        // 關鍵修改：確保interval參數正確傳遞
+        const params = {
+          interval: adjustedInterval, // 使用調整後的時間間隔
+          range,
+          includePrePost: false,
+          events: 'div,split',
+        };
+        
+        console.log('發送請求參數:', params); // 添加日誌以便調試
+        
         response = await axios.get(fullUrl, {
-          params: {
-            interval: adjustedInterval, // 使用調整後的時間間隔
-            range,
-            includePrePost: false,
-            events: 'div,split',
-          },
+          params,
           timeout: 10000, // 10秒超時
         });
         
-        console.log('成功獲取數據');
+        console.log('成功獲取數據，響應狀態:', response.status);
+        console.log('返回的時間間隔:', response.data?.chart?.result?.[0]?.meta?.dataGranularity || '未知');
         break; // 如果成功，跳出循環
       } catch (e) {
         error = e;
@@ -84,13 +89,19 @@ export const fetchStockData = async (
       // 嘗試直接請求（可能會因CORS而失敗，但值得一試）
       try {
         console.log('嘗試直接請求，不使用代理');
+        
+        // 關鍵修改：確保interval參數正確傳遞
+        const params = {
+          interval: adjustedInterval,
+          range,
+          includePrePost: false,
+          events: 'div,split',
+        };
+        
+        console.log('直接請求參數:', params);
+        
         response = await axios.get(yahooFinanceUrl, {
-          params: {
-            interval: adjustedInterval,
-            range,
-            includePrePost: false,
-            events: 'div,split',
-          },
+          params,
           timeout: 10000,
         });
         console.log('直接請求成功');
@@ -122,6 +133,14 @@ export const fetchStockData = async (
       return null;
     }
     
+    // 檢查返回的時間間隔是否與請求的一致
+    const returnedInterval = result.meta?.dataGranularity || 'unknown';
+    console.log(`請求的時間間隔: ${adjustedInterval}, 返回的時間間隔: ${returnedInterval}`);
+    
+    if (returnedInterval !== adjustedInterval) {
+      console.warn(`警告: 返回的時間間隔 (${returnedInterval}) 與請求的時間間隔 (${adjustedInterval}) 不一致`);
+    }
+    
     // 處理時間戳
     const timestamps = result.timestamp.map(ts => {
       // 確保時間戳是正確的格式
@@ -129,6 +148,14 @@ export const fetchStockData = async (
     });
     
     console.log(`成功處理數據，獲取了 ${result.timestamp.length} 個數據點`);
+    console.log(`第一個數據點時間: ${new Date(timestamps[0]).toLocaleString()}`);
+    console.log(`最後一個數據點時間: ${new Date(timestamps[timestamps.length - 1]).toLocaleString()}`);
+    
+    // 計算數據點之間的時間間隔（以小時為單位）
+    if (timestamps.length >= 2) {
+      const timeDiff = (timestamps[1] - timestamps[0]) / (1000 * 60 * 60);
+      console.log(`數據點之間的時間間隔: ${timeDiff.toFixed(2)} 小時`);
+    }
     
     return {
       timestamp: timestamps,
