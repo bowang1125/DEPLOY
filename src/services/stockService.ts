@@ -25,25 +25,94 @@ export const fetchStockData = async (
   range: string = '6mo'
 ): Promise<StockData | null> => {
   try {
-    // 使用CORS代理服務來避免CORS問題
-    const corsProxy = 'https://corsproxy.io/?';
+    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${interval}, 範圍: ${range}`);
+    
+    // 使用多個CORS代理選項，如果一個失敗則嘗試下一個
+    const corsProxies = [
+      'https://corsproxy.io/?',
+      'https://api.allorigins.win/raw?url=',
+      'https://cors-anywhere.herokuapp.com/'
+    ];
+    
     const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
     
-    const response = await axios.get(
-      `${corsProxy}${encodeURIComponent(yahooFinanceUrl)}`,
-      {
-        params: {
-          interval,
-          range,
-          includePrePost: false,
-          events: 'div,split',
-        },
+    let response = null;
+    let error = null;
+    
+    // 嘗試每個代理直到成功
+    for (const proxy of corsProxies) {
+      try {
+        console.log(`嘗試使用代理: ${proxy}`);
+        
+        // 構建完整URL
+        const fullUrl = `${proxy}${encodeURIComponent(yahooFinanceUrl)}`;
+        
+        response = await axios.get(fullUrl, {
+          params: {
+            interval,
+            range,
+            includePrePost: false,
+            events: 'div,split',
+          },
+          timeout: 10000, // 10秒超時
+        });
+        
+        console.log('成功獲取數據');
+        break; // 如果成功，跳出循環
+      } catch (e) {
+        error = e;
+        console.error(`使用代理 ${proxy} 失敗:`, e);
+        // 繼續嘗試下一個代理
       }
-    );
-
+    }
+    
+    // 如果所有代理都失敗
+    if (!response) {
+      console.error('所有CORS代理都失敗了', error);
+      
+      // 嘗試直接請求（可能會因CORS而失敗，但值得一試）
+      try {
+        console.log('嘗試直接請求，不使用代理');
+        response = await axios.get(yahooFinanceUrl, {
+          params: {
+            interval,
+            range,
+            includePrePost: false,
+            events: 'div,split',
+          },
+          timeout: 10000,
+        });
+        console.log('直接請求成功');
+      } catch (directError) {
+        console.error('直接請求也失敗了:', directError);
+        return null;
+      }
+    }
+    
+    // 檢查響應數據結構
+    if (!response.data || !response.data.chart || !response.data.chart.result || response.data.chart.result.length === 0) {
+      console.error('API響應格式不正確:', response.data);
+      return null;
+    }
+    
     const result = response.data.chart.result[0];
+    
+    // 檢查是否有必要的數據
+    if (!result.timestamp || !result.indicators || !result.indicators.quote || result.indicators.quote.length === 0) {
+      console.error('API響應中缺少必要的數據:', result);
+      return null;
+    }
+    
     const quotes = result.indicators.quote[0];
-
+    
+    // 檢查數據完整性
+    if (!quotes.open || !quotes.high || !quotes.low || !quotes.close || !quotes.volume) {
+      console.error('API響應中缺少價格數據:', quotes);
+      return null;
+    }
+    
+    console.log(`成功處理數據，獲取了 ${result.timestamp.length} 個數據點`);
+    
     return {
       timestamp: result.timestamp,
       open: quotes.open,
@@ -53,17 +122,22 @@ export const fetchStockData = async (
       volume: quotes.volume,
     };
   } catch (error) {
-    console.error('Error fetching stock data:', error);
+    console.error('獲取股票數據時出錯:', error);
     return null;
   }
 };
 
 // 將原始數據轉換為蠟燭圖數據格式
 export const transformToCandlestickData = (data: StockData): CandlestickData[] => {
-  if (!data || !data.timestamp) return [];
+  if (!data || !data.timestamp || data.timestamp.length === 0) {
+    console.error('無法轉換為蠟燭圖數據: 數據為空或格式不正確');
+    return [];
+  }
 
-  return data.timestamp.map((time, index) => ({
-    time: time,
+  console.log(`開始轉換蠟燭圖數據，原始數據點數量: ${data.timestamp.length}`);
+  
+  const candlestickData = data.timestamp.map((time, index) => ({
+    time: time * 1000, // 確保時間戳是毫秒格式，適用於圖表庫
     open: data.open[index],
     high: data.high[index],
     low: data.low[index],
@@ -74,12 +148,21 @@ export const transformToCandlestickData = (data: StockData): CandlestickData[] =
     item.low !== null && 
     item.close !== null
   );
+  
+  console.log(`轉換完成，有效蠟燭圖數據點數量: ${candlestickData.length}`);
+  
+  return candlestickData;
 };
 
 // 計算技術指標
 
 // 計算相對強弱指數 (RSI)
 export const calculateRSI = (closePrices: number[], period: number = 14): number[] => {
+  if (!closePrices || closePrices.length < period + 1) {
+    console.error(`無法計算RSI: 數據點不足，需要至少 ${period + 1} 個點，但只有 ${closePrices?.length || 0} 個點`);
+    return Array(closePrices?.length || 0).fill(null);
+  }
+
   const rsi: number[] = [];
   const gains: number[] = [];
   const losses: number[] = [];
@@ -114,6 +197,11 @@ export const calculateRSI = (closePrices: number[], period: number = 14): number
 
 // 計算移動平均線 (MA)
 export const calculateMA = (data: number[], period: number): number[] => {
+  if (!data || data.length < period) {
+    console.error(`無法計算MA: 數據點不足，需要至少 ${period} 個點，但只有 ${data?.length || 0} 個點`);
+    return Array(data?.length || 0).fill(null);
+  }
+
   const result: number[] = [];
   
   for (let i = 0; i < data.length; i++) {
@@ -140,6 +228,14 @@ export const calculateVWAP = (
   volumes: number[],
   period: number = 14
 ): number[] => {
+  if (!highPrices || !lowPrices || !closePrices || !volumes || 
+      highPrices.length < period || lowPrices.length < period || 
+      closePrices.length < period || volumes.length < period) {
+    console.error(`無法計算VWAP: 數據點不足或格式不正確`);
+    return Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0, 
+                          closePrices?.length || 0, volumes?.length || 0)).fill(null);
+  }
+
   const typicalPrices: number[] = [];
   const vwap: number[] = [];
   
@@ -176,6 +272,12 @@ export const calculateATR = (
   closePrices: number[],
   period: number = 14
 ): number[] => {
+  if (!highPrices || !lowPrices || !closePrices || 
+      highPrices.length < period || lowPrices.length < period || closePrices.length < period) {
+    console.error(`無法計算ATR: 數據點不足或格式不正確`);
+    return Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0, closePrices?.length || 0)).fill(null);
+  }
+
   const trueRanges: number[] = [];
   const atr: number[] = [];
   
@@ -219,6 +321,15 @@ export const identifyMarketStructure = (
   lowPrices: number[],
   period: number = 10
 ): { highs: number[], lows: number[] } => {
+  if (!highPrices || !lowPrices || 
+      highPrices.length < period * 2 + 1 || lowPrices.length < period * 2 + 1) {
+    console.error(`無法識別市場結構: 數據點不足或格式不正確`);
+    return { 
+      highs: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null),
+      lows: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null)
+    };
+  }
+
   const highs: number[] = Array(highPrices.length).fill(null);
   const lows: number[] = Array(lowPrices.length).fill(null);
   
@@ -263,6 +374,15 @@ export const detectRSIDivergence = (
   rsiValues: number[],
   period: number = 14
 ): { bullishDivergence: boolean[], bearishDivergence: boolean[] } => {
+  if (!closePrices || !rsiValues || 
+      closePrices.length < period * 2 || rsiValues.length < period * 2) {
+    console.error(`無法檢測RSI背離: 數據點不足或格式不正確`);
+    return { 
+      bullishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false),
+      bearishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false)
+    };
+  }
+
   const bullishDivergence: boolean[] = Array(closePrices.length).fill(false);
   const bearishDivergence: boolean[] = Array(closePrices.length).fill(false);
   
@@ -295,6 +415,14 @@ export const generateTradingSignals = (
   marketStructure: { highs: number[], lows: number[] },
   rsiDivergence: { bullishDivergence: boolean[], bearishDivergence: boolean[] }
 ): { buySignals: boolean[], sellSignals: boolean[] } => {
+  if (!closePrices || closePrices.length === 0) {
+    console.error(`無法生成交易信號: 價格數據為空或格式不正確`);
+    return { 
+      buySignals: [],
+      sellSignals: []
+    };
+  }
+
   const buySignals: boolean[] = Array(closePrices.length).fill(false);
   const sellSignals: boolean[] = Array(closePrices.length).fill(false);
   
@@ -343,6 +471,19 @@ export const backtest = (
   maxDrawdown: number;
   annualReturn: number;
 } => {
+  if (!closePrices || !buySignals || !sellSignals || 
+      closePrices.length === 0 || buySignals.length === 0 || sellSignals.length === 0) {
+    console.error(`無法執行回測: 數據為空或格式不正確`);
+    return { 
+      equity: [initialCapital],
+      trades: [],
+      winRate: 0,
+      profitFactor: 0,
+      maxDrawdown: 0,
+      annualReturn: 0
+    };
+  }
+
   const equity: number[] = [initialCapital];
   const trades: { entry: number; exit: number; profit: number; }[] = [];
   
