@@ -1,0 +1,1618 @@
+/* 主要樣式表 */
+:root {
+    /* 主要顏色 */
+    --primary-color: #0088ff;
+    --primary-dark: #0066cc;
+    --primary-light: #66bbff;
+    --secondary-color: #ff4400;
+    --accent-color: #00ccff;
+    
+    /* 背景顏色 */
+    --bg-dark: #0a1525;
+    --bg-medium: #112240;
+    --bg-light: #1a3366;
+    
+    /* 文字顏色 */
+    --text-light: #ffffff;
+    --text-medium: #ccddff;
+    --text-dark: #99aacc;
+    
+    /* 難度顏色 */
+    --difficulty-high: #ff4400;
+    --difficulty-medium: #ffaa00;
+    --difficulty-low: #00cc66;
+    
+    /* 其他 */
+    --border-radius: 8px;
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --transition-speed: 0.3s;
+}
+
+/* 基本樣式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+a {
+    color: var(--primary-light);
+    text-decoration: none;
+    transition: color var(--transition-speed);
+}
+
+a:hover {
+    color: var(--accent-color);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    outline: none;
+    font-family: inherit;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+p {
+    margin-bottom: 1rem;
+}
+
+ul, ol {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+/* 載入畫面 */
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-dark);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.5s;
+}
+
+.loading-screen.fade-out {
+    opacity: 0;
+}
+
+.loading-animation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.detective-icon {
+    font-size: 3rem;
+    color: var(--primary-color);
+    animation: pulse 1.5s infinite;
+}
+
+.loading-text {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    color: var(--text-medium);
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* 頁首 */
+header {
+    background-color: var(--bg-medium);
+    padding: 1rem 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+}
+
+.logo-image {
+    height: 40px;
+    margin-right: 1rem;
+}
+
+.logo h1 {
+    font-size: 1.5rem;
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.language-selector {
+    display: flex;
+    align-items: center;
+}
+
+.lang-btn {
+    background: none;
+    color: var(--text-medium);
+    padding: 0.5rem 0.8rem;
+    margin-left: 0.5rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-speed);
+}
+
+.lang-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-light);
+}
+
+.lang-btn.active {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.theme-toggle {
+    margin-left: 1rem;
+    position: relative;
+    width: 60px;
+    height: 30px;
+    background-color: var(--bg-light);
+    border-radius: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5px;
+}
+
+.theme-toggle i {
+    font-size: 1rem;
+    z-index: 1;
+}
+
+.fa-sun {
+    color: #ffcc00;
+}
+
+.fa-moon {
+    color: #aabbff;
+}
+
+.toggle-slider {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 26px;
+    height: 26px;
+    background-color: var(--primary-color);
+    border-radius: 50%;
+    transition: transform var(--transition-speed);
+}
+
+.light-theme .toggle-slider {
+    transform: translateX(30px);
+}
+
+/* 導航欄 */
+nav {
+    background-color: var(--bg-light);
+    padding: 0.5rem 0;
+    position: sticky;
+    top: 70px;
+    z-index: 90;
+}
+
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.menu-toggle {
+    display: none;
+    background: none;
+    color: var(--text-light);
+    font-size: 1.5rem;
+    padding: 0.5rem;
+}
+
+.main-menu {
+    display: flex;
+    list-style: none;
+    width: 100%;
+}
+
+.main-menu li {
+    margin-right: 1rem;
+}
+
+.main-menu a {
+    display: flex;
+    align-items: center;
+    color: var(--text-medium);
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-speed);
+}
+
+.main-menu a i {
+    margin-right: 0.5rem;
+}
+
+.main-menu a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-light);
+}
+
+.main-menu a.active {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+/* 主要內容區 */
+main {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+section {
+    display: none;
+    margin-bottom: 3rem;
+}
+
+section.active-section {
+    display: block;
+    animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+section h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+/* 英雄區塊 */
+.hero {
+    display: flex;
+    align-items: center;
+    margin-bottom: 3rem;
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+}
+
+.hero-content {
+    flex: 1;
+    padding: 3rem;
+}
+
+.hero-title {
+    font-size: 2.5rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.hero-description {
+    font-size: 1.1rem;
+    color: var(--text-medium);
+    margin-bottom: 2rem;
+}
+
+.cta-button {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem 2rem;
+    font-size: 1.1rem;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.cta-button:hover {
+    background-color: var(--primary-dark);
+}
+
+.hero-image {
+    flex: 1;
+    position: relative;
+    height: 400px;
+    overflow: hidden;
+}
+
+.image-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.hero-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.image-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--bg-medium) 0%, rgba(10, 21, 37, 0) 100%);
+}
+
+/* 特色卡片 */
+.features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.feature-card {
+    background-color: var(--bg-medium);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    transition: transform var(--transition-speed);
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+}
+
+.feature-icon {
+    font-size: 2.5rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.feature-card h3 {
+    font-size: 1.5rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.feature-card p {
+    color: var(--text-medium);
+}
+
+/* 犯罪手法分類卡片 */
+.crime-method-categories {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.crime-method-card {
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    position: relative;
+    transition: transform var(--transition-speed);
+}
+
+.crime-method-card:hover {
+    transform: translateY(-5px);
+}
+
+.difficulty-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--text-light);
+}
+
+.difficulty-high {
+    background-color: var(--difficulty-high);
+}
+
+.difficulty-medium {
+    background-color: var(--difficulty-medium);
+}
+
+.difficulty-low {
+    background-color: var(--difficulty-low);
+}
+
+.crime-method-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100px;
+    font-size: 3rem;
+    color: var(--primary-color);
+    background-color: rgba(0, 136, 255, 0.1);
+    margin-bottom: 1rem;
+}
+
+.crime-method-content {
+    padding: 1.5rem;
+}
+
+.crime-method-title {
+    font-size: 1.5rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.crime-method-description {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+    min-height: 80px;
+}
+
+.crime-method-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.crime-method-stat {
+    text-align: center;
+}
+
+.crime-method-stat-label {
+    font-size: 0.8rem;
+    color: var(--text-dark);
+    margin-bottom: 0.3rem;
+}
+
+.crime-method-stat-value {
+    font-size: 1rem;
+    color: var(--text-light);
+}
+
+.crime-method-btn {
+    display: block;
+    width: 100%;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem;
+    text-align: center;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.crime-method-btn:hover {
+    background-color: var(--primary-dark);
+}
+
+/* 案例分析區塊 */
+.case-analysis-section {
+    margin-bottom: 3rem;
+}
+
+.case-analysis-title {
+    font-size: 2rem;
+    color: var(--primary-color);
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.case-analysis-subtitle {
+    text-align: center;
+    color: var(--text-medium);
+    margin-bottom: 2rem;
+}
+
+.case-categories {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+}
+
+.case-category {
+    background-color: var(--bg-light);
+    color: var(--text-medium);
+    padding: 0.5rem 1.5rem;
+    margin: 0 0.5rem 0.5rem 0;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.case-category:hover {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.case-category.active {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.case-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+}
+
+.case-card {
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    transition: transform var(--transition-speed);
+}
+
+.case-card:hover {
+    transform: translateY(-5px);
+}
+
+.case-card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.case-card-title {
+    font-size: 1.5rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.case-card-description {
+    color: var(--text-medium);
+}
+
+.case-card-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.case-stat-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.case-stat-label {
+    font-size: 0.8rem;
+    color: var(--text-dark);
+    margin-bottom: 0.3rem;
+}
+
+.case-stat-value {
+    font-size: 1rem;
+    color: var(--text-light);
+}
+
+.case-difficulty {
+    grid-column: span 2;
+    margin-top: 0.5rem;
+}
+
+.difficulty-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-dark);
+    margin-bottom: 0.3rem;
+}
+
+.difficulty-stars {
+    color: var(--primary-color);
+}
+
+.case-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.case-tag {
+    background-color: var(--bg-light);
+    color: var(--text-medium);
+    padding: 0.3rem 0.8rem;
+    margin: 0 0.5rem 0.5rem 0;
+    border-radius: 20px;
+    font-size: 0.8rem;
+}
+
+.case-card-footer {
+    padding: 1.5rem;
+}
+
+.case-detail-btn {
+    display: block;
+    width: 100%;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem;
+    text-align: center;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.case-detail-btn:hover {
+    background-color: var(--primary-dark);
+}
+
+/* 章節目錄 */
+.chapter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.chapter-card {
+    display: flex;
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    transition: transform var(--transition-speed);
+}
+
+.chapter-card:hover {
+    transform: translateY(-5px);
+}
+
+.chapter-number {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 80px;
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--text-light);
+    background-color: var(--primary-color);
+}
+
+.chapter-content {
+    flex: 1;
+    padding: 1.5rem;
+}
+
+.chapter-content h3 {
+    font-size: 1.3rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.chapter-content p {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.chapter-btn {
+    display: block;
+    width: 100%;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem;
+    text-align: center;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.chapter-btn:hover {
+    background-color: var(--primary-dark);
+}
+
+/* 互動專區 */
+.interactive-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.interactive-card {
+    background-color: var(--bg-medium);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    transition: transform var(--transition-speed);
+}
+
+.interactive-card:hover {
+    transform: translateY(-5px);
+}
+
+.interactive-card h3 {
+    font-size: 1.5rem;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.interactive-card p {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+}
+
+.interactive-btn {
+    display: block;
+    width: 100%;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem;
+    text-align: center;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.interactive-btn:hover {
+    background-color: var(--primary-dark);
+}
+
+.interactive-module {
+    background-color: var(--bg-medium);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-top: 2rem;
+    display: none;
+}
+
+.interactive-module.active {
+    display: block;
+    animation: fadeIn 0.5s;
+}
+
+.interactive-module h3 {
+    font-size: 1.5rem;
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+.visualization-content {
+    display: flex;
+    flex-direction: column;
+}
+
+#crime-chart {
+    width: 100%;
+    height: 400px;
+    margin-bottom: 1.5rem;
+    background-color: var(--bg-light);
+    border-radius: var(--border-radius);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-medium);
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: center;
+}
+
+.chart-btn {
+    background-color: var(--bg-light);
+    color: var(--text-medium);
+    padding: 0.5rem 1rem;
+    margin: 0 0.5rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-speed);
+}
+
+.chart-btn:hover {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.chart-btn.active {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+/* 搜尋 */
+.search-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.search-input-container {
+    flex: 1;
+    min-width: 300px;
+    display: flex;
+}
+
+#search-input {
+    flex: 1;
+    padding: 0.8rem;
+    border: none;
+    border-radius: var(--border-radius) 0 0 var(--border-radius);
+    background-color: var(--bg-light);
+    color: var(--text-light);
+    font-size: 1rem;
+}
+
+#search-button {
+    padding: 0.8rem 1.5rem;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    transition: background-color var(--transition-speed);
+}
+
+#search-button:hover {
+    background-color: var(--primary-dark);
+}
+
+.filter-container {
+    display: flex;
+    align-items: center;
+}
+
+#category-filter {
+    padding: 0.8rem;
+    border: none;
+    border-radius: var(--border-radius);
+    background-color: var(--bg-light);
+    color: var(--text-light);
+    font-size: 1rem;
+}
+
+.search-results {
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    min-height: 300px;
+}
+
+/* 關於 */
+.about-content {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+}
+
+.about-text {
+    background-color: var(--bg-medium);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.about-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.stat-item {
+    background-color: var(--bg-medium);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--text-medium);
+}
+
+/* 內容覆蓋層 */
+.content-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-speed);
+}
+
+.content-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.content-container {
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background-color: var(--bg-light);
+}
+
+.content-header h2 {
+    margin: 0;
+    color: var(--text-light);
+}
+
+.close-content {
+    background: none;
+    color: var(--text-medium);
+    font-size: 1.5rem;
+    transition: color var(--transition-speed);
+}
+
+.close-content:hover {
+    color: var(--text-light);
+}
+
+.content-body {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.content-navigation {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem;
+    background-color: var(--bg-light);
+}
+
+.nav-btn {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.8rem 1.5rem;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed);
+}
+
+.nav-btn:hover {
+    background-color: var(--primary-dark);
+}
+
+.nav-btn:disabled {
+    background-color: var(--bg-light);
+    color: var(--text-dark);
+    cursor: not-allowed;
+}
+
+/* 方法詳情覆蓋層 */
+.method-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-speed);
+}
+
+.method-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.method-container {
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.method-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background-color: var(--bg-light);
+}
+
+.method-header h2 {
+    margin: 0;
+    color: var(--text-light);
+}
+
+.close-method {
+    background: none;
+    color: var(--text-medium);
+    font-size: 1.5rem;
+    transition: color var(--transition-speed);
+}
+
+.close-method:hover {
+    color: var(--text-light);
+}
+
+.method-body {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.method-detail {
+    display: flex;
+    flex-direction: column;
+}
+
+.method-info {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.method-info-item {
+    text-align: center;
+}
+
+.method-info-label {
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    margin-bottom: 0.5rem;
+}
+
+.method-info-value {
+    font-size: 1.2rem;
+    color: var(--text-light);
+}
+
+.method-description h3 {
+    color: var(--primary-color);
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.method-description p {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+}
+
+.method-description ul {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+}
+
+/* 案例詳情覆蓋層 */
+.case-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-speed);
+}
+
+.case-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.case-container {
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.case-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background-color: var(--bg-light);
+}
+
+.case-header h2 {
+    margin: 0;
+    color: var(--text-light);
+}
+
+.close-case {
+    background: none;
+    color: var(--text-medium);
+    font-size: 1.5rem;
+    transition: color var(--transition-speed);
+}
+
+.close-case:hover {
+    color: var(--text-light);
+}
+
+.case-body {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.case-detail {
+    display: flex;
+    flex-direction: column;
+}
+
+.case-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.case-info-item {
+    text-align: center;
+}
+
+.case-info-label {
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    margin-bottom: 0.5rem;
+}
+
+.case-info-value {
+    font-size: 1.2rem;
+    color: var(--text-light);
+}
+
+.case-description h3 {
+    color: var(--primary-color);
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.case-description p {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+}
+
+.case-description ul {
+    color: var(--text-medium);
+    margin-bottom: 1.5rem;
+}
+
+/* 頁尾 */
+footer {
+    background-color: var(--bg-medium);
+    padding: 3rem 0 0;
+    margin-top: 3rem;
+}
+
+.footer-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.footer-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.footer-logo-img {
+    height: 40px;
+    margin-bottom: 1rem;
+}
+
+.footer-logo p {
+    color: var(--text-medium);
+    font-size: 0.9rem;
+}
+
+.footer-links h4 {
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+.footer-links ul {
+    list-style: none;
+    margin: 0;
+}
+
+.footer-links li {
+    margin-bottom: 0.8rem;
+}
+
+.footer-links a {
+    color: var(--text-medium);
+    transition: color var(--transition-speed);
+}
+
+.footer-links a:hover {
+    color: var(--primary-color);
+}
+
+.footer-social h4 {
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+.social-icons {
+    display: flex;
+}
+
+.social-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    background-color: var(--bg-light);
+    color: var(--text-medium);
+    border-radius: 50%;
+    margin-right: 1rem;
+    transition: all var(--transition-speed);
+}
+
+.social-icon:hover {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.footer-bottom {
+    background-color: var(--bg-light);
+    padding: 1.5rem 0;
+    text-align: center;
+}
+
+.footer-bottom p {
+    color: var(--text-medium);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* 響應式設計 */
+@media (max-width: 992px) {
+    .hero {
+        flex-direction: column;
+    }
+    
+    .hero-content {
+        padding: 2rem;
+    }
+    
+    .hero-image {
+        width: 100%;
+        height: 300px;
+    }
+    
+    .about-content {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .language-selector {
+        margin-top: 1rem;
+    }
+    
+    .menu-toggle {
+        display: block;
+    }
+    
+    .main-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        flex-direction: column;
+        background-color: var(--bg-light);
+        padding: 1rem;
+        box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+        display: none;
+    }
+    
+    .main-menu.show {
+        display: flex;
+    }
+    
+    .main-menu li {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .case-info {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-title {
+        font-size: 2rem;
+    }
+    
+    .hero-description {
+        font-size: 1rem;
+    }
+    
+    .case-card-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .case-difficulty {
+        grid-column: span 1;
+    }
+}
+
+/* 亮色主題 */
+body.light-theme {
+    background-color: #f0f5ff;
+    color: #333;
+}
+
+body.light-theme header {
+    background-color: #ffffff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .logo h1 {
+    color: var(--primary-color);
+}
+
+body.light-theme nav {
+    background-color: #e0e8ff;
+}
+
+body.light-theme .main-menu a {
+    color: #555;
+}
+
+body.light-theme .main-menu a:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+body.light-theme .main-menu a.active {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+body.light-theme section h2 {
+    color: var(--primary-color);
+}
+
+body.light-theme .hero {
+    background-color: #ffffff;
+}
+
+body.light-theme .hero-title {
+    color: var(--primary-color);
+}
+
+body.light-theme .hero-description {
+    color: #555;
+}
+
+body.light-theme .image-overlay {
+    background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+body.light-theme .feature-card,
+body.light-theme .crime-method-card,
+body.light-theme .case-card,
+body.light-theme .chapter-card,
+body.light-theme .interactive-card,
+body.light-theme .interactive-module,
+body.light-theme .about-text,
+body.light-theme .stat-item {
+    background-color: #ffffff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .feature-card h3,
+body.light-theme .crime-method-title,
+body.light-theme .case-card-title,
+body.light-theme .chapter-content h3 {
+    color: #333;
+}
+
+body.light-theme .feature-card p,
+body.light-theme .crime-method-description,
+body.light-theme .case-card-description,
+body.light-theme .chapter-content p {
+    color: #555;
+}
+
+body.light-theme .crime-method-stat-label,
+body.light-theme .case-stat-label,
+body.light-theme .difficulty-label {
+    color: #777;
+}
+
+body.light-theme .crime-method-stat-value,
+body.light-theme .case-stat-value {
+    color: #333;
+}
+
+body.light-theme .case-category,
+body.light-theme .case-tag {
+    background-color: #e0e8ff;
+    color: #555;
+}
+
+body.light-theme #search-input,
+body.light-theme #category-filter {
+    background-color: #e0e8ff;
+    color: #333;
+}
+
+body.light-theme .search-results {
+    background-color: #ffffff;
+}
+
+body.light-theme footer {
+    background-color: #ffffff;
+}
+
+body.light-theme .footer-bottom {
+    background-color: #e0e8ff;
+}
+
+body.light-theme .footer-logo p,
+body.light-theme .footer-links a,
+body.light-theme .footer-bottom p {
+    color: #555;
+}
+
+body.light-theme .social-icon {
+    background-color: #e0e8ff;
+    color: #555;
+}
+
+body.light-theme .content-container,
+body.light-theme .method-container,
+body.light-theme .case-container {
+    background-color: #ffffff;
+}
+
+body.light-theme .content-header,
+body.light-theme .method-header,
+body.light-theme .case-header,
+body.light-theme .content-navigation {
+    background-color: #e0e8ff;
+}
+
+body.light-theme .content-header h2,
+body.light-theme .method-header h2,
+body.light-theme .case-header h2 {
+    color: #333;
+}
+
+body.light-theme .close-content,
+body.light-theme .close-method,
+body.light-theme .close-case {
+    color: #555;
+}
+
+body.light-theme .close-content:hover,
+body.light-theme .close-method:hover,
+body.light-theme .close-case:hover {
+    color: #333;
+}
+
+body.light-theme .method-info-label,
+body.light-theme .case-info-label {
+    color: #777;
+}
+
+body.light-theme .method-info-value,
+body.light-theme .case-info-value {
+    color: #333;
+}
+
+body.light-theme .method-description h3,
+body.light-theme .case-description h3 {
+    color: var(--primary-color);
+}
+
+body.light-theme .method-description p,
+body.light-theme .method-description ul,
+body.light-theme .case-description p,
+body.light-theme .case-description ul {
+    color: #555;
+}
+
+body.light-theme .nav-btn:disabled {
+    background-color: #e0e8ff;
+    color: #999;
+}
