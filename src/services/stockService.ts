@@ -18,17 +18,19 @@ export interface CandlestickData {
   close: number;
 }
 
-// 獲取股票數據的函數
+// 使用CORS代理來獲取股票數據
 export const fetchStockData = async (
   symbol: string,
   interval: string = '1d',
   range: string = '6mo'
 ): Promise<StockData | null> => {
   try {
-    // 這裡使用Yahoo Finance API
-    // 在實際部署時，應該使用後端API來避免CORS問題
+    // 使用CORS代理服務來避免CORS問題
+    const corsProxy = 'https://corsproxy.io/?';
+    const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+    
     const response = await axios.get(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
+      `${corsProxy}${encodeURIComponent(yahooFinanceUrl)}`,
       {
         params: {
           interval,
