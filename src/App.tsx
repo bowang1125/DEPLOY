@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import ChartComponent from './components/ChartComponent';
 import { 
   fetchStockData, 
@@ -10,6 +10,11 @@ import {
   detectRSIDivergence, 
   generateTradingSignals,
   backtest,
+  calculateMA,
+  calculateEMA,
+  calculateMACD,
+  calculateBollingerBands,
+  calculateFibonacciLevels,
   CandlestickData
 } from './services/stockService';
 
@@ -35,6 +40,7 @@ function App() {
   const [marketType, setMarketType] = useState<'us' | 'tw' | 'futures'>('us');
   const [timeframe, setTimeframe] = useState<string>('1d');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   
   // 股票數據狀態
   const [candlestickData, setCandlestickData] = useState<CandlestickData[]>([]);
@@ -62,11 +68,63 @@ function App() {
     backtestResult: null
   });
   
+  // 技術指標狀態
+  const [activeIndicators, setActiveIndicators] = useState<{
+    ma: boolean;
+    ema: boolean;
+    macd: boolean;
+    rsi: boolean;
+    bollingerBands: boolean;
+    volume: boolean;
+    fibonacci: boolean;
+  }>({
+    ma: false,
+    ema: false,
+    macd: false,
+    rsi: false,
+    bollingerBands: false,
+    volume: false,
+    fibonacci: false
+  });
+  
+  const [indicators, setIndicators] = useState<{
+    ma: number[][] | null;
+    ema: number[][] | null;
+    macd: {
+      macd: number[];
+      signal: number[];
+      histogram: number[];
+    } | null;
+    rsi: number[] | null;
+    bollingerBands: {
+      upper: number[];
+      middle: number[];
+      lower: number[];
+    } | null;
+    volume: number[] | null;
+    fibonacci: {
+      levels: { [key: string]: number };
+      trend: 'up' | 'down';
+    } | null;
+  }>({
+    ma: null,
+    ema: null,
+    macd: null,
+    rsi: null,
+    bollingerBands: null,
+    volume: null,
+    fibonacci: null
+  });
+  
   // 處理分析請求
   const handleAnalyze = async () => {
-    if (!symbol.trim()) return;
+    if (!symbol.trim()) {
+      setErrorMessage('請輸入股票代號');
+      return;
+    }
     
     setIsAnalyzing(true);
+    setErrorMessage('');
     setCandlestickData([]);
     setAnalysisResult({
       rsi: null,
@@ -76,6 +134,17 @@ function App() {
       rsiDivergence: null,
       signals: null,
       backtestResult: null
+    });
+    
+    // 重置指標
+    setIndicators({
+      ma: null,
+      ema: null,
+      macd: null,
+      rsi: null,
+      bollingerBands: null,
+      volume: null,
+      fibonacci: null
     });
     
     try {
@@ -91,8 +160,16 @@ function App() {
         else adjustedSymbol = `${symbol}=F`;
       }
       
+      console.log(`開始分析: ${adjustedSymbol}, 時間間隔: ${timeframe}`);
+      
       // 獲取股票數據
       const stockData = await fetchStockData(adjustedSymbol, timeframe, '1y');
+      
+      if (!stockData) {
+        setErrorMessage(`找不到股票代號 ${symbol} 的數據，請確認代號是否正確`);
+        setIsAnalyzing(false);
+        return;
+      }
       
       if (stockData && stockData.timestamp.length > 0) {
         // 轉換為蠟燭圖數據
@@ -138,13 +215,55 @@ function App() {
             annualReturn: backtestResult.annualReturn
           }
         });
+        
+        // 計算其他技術指標
+        // MA
+        const ma10 = calculateMA(stockData.close, 10);
+        const ma20 = calculateMA(stockData.close, 20);
+        const ma50 = calculateMA(stockData.close, 50);
+        
+        // EMA
+        const ema12 = calculateEMA(stockData.close, 12);
+        const ema26 = calculateEMA(stockData.close, 26);
+        const ema50 = calculateEMA(stockData.close, 50);
+        
+        // MACD
+        const macd = calculateMACD(stockData.close);
+        
+        // 布林帶
+        const bollingerBands = calculateBollingerBands(stockData.close);
+        
+        // 斐波那契回調
+        const fibonacci = calculateFibonacciLevels(stockData.high, stockData.low);
+        
+        // 更新指標
+        setIndicators({
+          ma: [ma10, ma20, ma50],
+          ema: [ema12, ema26, ema50],
+          macd,
+          rsi: rsiValues,
+          bollingerBands,
+          volume: stockData.volume,
+          fibonacci
+        });
+      } else {
+        setErrorMessage(`找不到股票代號 ${symbol} 的數據，請確認代號是否正確`);
       }
     } catch (error) {
       console.error('Analysis error:', error);
+      setErrorMessage(`分析過程中出錯: ${error instanceof Error ? error.message : '未知錯誤'}`);
     } finally {
       setIsAnalyzing(false);
     }
   };
+  
+  // 處理指標按鈕點擊
+  const handleIndicatorToggle = useCallback((indicator: keyof typeof activeIndicators) => {
+    setActiveIndicators(prev => ({
+      ...prev,
+      [indicator]: !prev[indicator]
+    }));
+  }, []);
   
   // 獲取最新的交易信號
   const getLatestSignal = () => {
@@ -287,103 +406,62 @@ function App() {
     const lastPrice = candlestickData[candlestickData.length - 1].close;
     const lastATR = atrValues[lastValidIndex];
     
-    // 計算動態止損位置（使用2倍ATR）
-    const longStopLoss = Math.round((lastPrice - 2 * lastATR) * 100) / 100;
-    const shortStopLoss = Math.round((lastPrice + 2 * lastATR) * 100) / 100;
+    const buyStopLoss = lastPrice - lastATR * 2;
+    const sellStopLoss = lastPrice + lastATR * 2;
     
-    return `多頭止損位: ${longStopLoss}, 空頭止損位: ${shortStopLoss}`;
-  };
-  
-  // 獲取市場情緒分析
-  const getMarketSentimentAnalysis = () => {
-    if (!analysisResult.rsi || !candlestickData.length) return '尚未分析';
-    
-    const rsiValues = analysisResult.rsi;
-    const lastValidIndex = rsiValues.findIndex((v, i, arr) => i >= arr.length - 5 && v !== null);
-    
-    if (lastValidIndex === -1) return 'RSI數據不足';
-    
-    const lastRSI = rsiValues[lastValidIndex];
-    
-    if (lastRSI > 70) {
-      return '市場過熱，可能出現回調';
-    } else if (lastRSI < 30) {
-      return '市場超賣，可能出現反彈';
-    } else if (lastRSI > 50) {
-      return '市場偏向樂觀';
-    } else if (lastRSI < 50) {
-      return '市場偏向謹慎';
-    } else {
-      return '市場情緒中性';
-    }
-  };
-  
-  // 獲取綜合建議
-  const getOverallRecommendation = () => {
-    if (!analysisResult.signals || !candlestickData.length) return '請先進行分析以獲取交易建議';
-    
-    const latestSignal = getLatestSignal();
-    
-    if (latestSignal.includes('買入')) {
-      return '綜合技術指標顯示看漲信號，考慮買入';
-    } else if (latestSignal.includes('賣出')) {
-      return '綜合技術指標顯示看跌信號，考慮賣出';
-    } else {
-      return '無明確信號，建議觀望';
-    }
+    return `
+      當前ATR值: ${lastATR.toFixed(2)}
+      多頭止損位: ${buyStopLoss.toFixed(2)} (當前價格 - 2ATR)
+      空頭止損位: ${sellStopLoss.toFixed(2)} (當前價格 + 2ATR)
+    `;
   };
   
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* 頂部導航欄 - 響應式設計 */}
-      <header className="bg-gray-800 p-4 shadow-lg border-b border-blue-900/30">
+      {/* 頂部導航欄 */}
+      <nav className="bg-gray-800 p-4 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-xl md:text-2xl font-bold text-blue-400 glow-text">專業投資分析平台</h1>
+          <a href="#" className="text-xl md:text-2xl font-bold text-blue-400 glow-text">專業投資分析平台</a>
           
-          {/* 桌面版導航 */}
-          <nav className="hidden md:block">
-            <ul className="flex space-x-4">
-              <li><a href="#" className="text-gray-300 hover:text-blue-400 transition-colors">首頁</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-400 transition-colors">回測歷史</a></li>
-              <li><a href="#" className="text-gray-300 hover:text-blue-400 transition-colors">關於</a></li>
-            </ul>
-          </nav>
+          <div className="hidden md:flex space-x-6">
+            <a href="#" className="hover:text-blue-400 transition-colors">首頁</a>
+            <a href="#" className="hover:text-blue-400 transition-colors">回測歷史</a>
+            <a href="#" className="hover:text-blue-400 transition-colors">關於</a>
+          </div>
           
-          {/* 移動版漢堡菜單按鈕 */}
           <button 
-            className="md:hidden text-gray-300 focus:outline-none"
+            className="md:hidden text-gray-300 hover:text-white"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path>
             </svg>
           </button>
         </div>
         
-        {/* 移動版下拉菜單 */}
+        {/* 移動端菜單 */}
         {isMobileMenuOpen && (
-          <div className="md:hidden mt-2 py-2 border-t border-gray-700">
-            <ul className="space-y-2">
-              <li><a href="#" className="block px-4 py-1 text-gray-300 hover:text-blue-400 transition-colors">首頁</a></li>
-              <li><a href="#" className="block px-4 py-1 text-gray-300 hover:text-blue-400 transition-colors">回測歷史</a></li>
-              <li><a href="#" className="block px-4 py-1 text-gray-300 hover:text-blue-400 transition-colors">關於</a></li>
-            </ul>
+          <div className="md:hidden mt-2 bg-gray-700 rounded shadow-lg p-2">
+            <a href="#" className="block p-2 hover:bg-gray-600 rounded">首頁</a>
+            <a href="#" className="block p-2 hover:bg-gray-600 rounded">回測歷史</a>
+            <a href="#" className="block p-2 hover:bg-gray-600 rounded">關於</a>
           </div>
         )}
-      </header>
+      </nav>
       
-      <main className="container mx-auto p-4">
-        {/* 搜索區域 - 響應式設計 */}
-        <div className="mb-6 bg-gray-800 p-4 rounded-lg shadow-lg border border-blue-900/20">
+      {/* 主要內容 */}
+      <div className="container mx-auto p-4 md:p-6">
+        {/* 輸入區域 */}
+        <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 border border-blue-900/20">
           <h2 className="text-lg md:text-xl font-semibold mb-4 text-blue-300">輸入股票/期貨代號</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="md:col-span-2">
               <input 
                 type="text" 
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                placeholder="輸入美股、海外期貨或台股代號" 
+                placeholder="輸入美股、海外期貨或台股代號"
                 className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -391,7 +469,7 @@ function App() {
             <div>
               <select 
                 value={marketType}
-                onChange={(e) => setMarketType(e.target.value as any)}
+                onChange={(e) => setMarketType(e.target.value as 'us' | 'tw' | 'futures')}
                 className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none"
               >
                 <option value="us">美股</option>
@@ -440,6 +518,13 @@ function App() {
               )}
             </button>
           </div>
+          
+          {/* 錯誤訊息 */}
+          {errorMessage && (
+            <div className="mt-4 p-3 bg-red-900/50 border border-red-500 rounded text-red-200">
+              {errorMessage}
+            </div>
+          )}
         </div>
         
         {/* 主要內容區域 - 響應式設計 */}
@@ -449,40 +534,75 @@ function App() {
             <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-4 text-blue-300">K線圖</h3>
             <div className="aspect-video bg-gray-700 rounded chart-container">
               {candlestickData.length > 0 ? (
-                <ChartComponent data={candlestickData} />
+                <ChartComponent 
+                  data={candlestickData} 
+                  indicators={indicators}
+                  activeIndicators={activeIndicators}
+                />
               ) : (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center p-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 md:h-12 w-8 md:w-12 mx-auto text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    <p className="text-gray-400 text-sm md:text-base">輸入股票代號並點擊分析以顯示K線圖</p>
-                  </div>
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  {isAnalyzing ? '載入中...' : '輸入股票代號並點擊分析以顯示K線圖'}
                 </div>
               )}
             </div>
             
-            {/* 指標按鈕 - 響應式設計 */}
-            <div className="mt-3 md:mt-4 flex flex-wrap gap-1 md:gap-2">
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">MA</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">EMA</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">MACD</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">RSI</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">布林帶</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">成交量</button>
-              <button className="px-2 md:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">斐波那契</button>
+            {/* 技術指標按鈕 */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button 
+                onClick={() => handleIndicatorToggle('ma')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.ma ? 'bg-orange-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                MA
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('ema')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.ema ? 'bg-green-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                EMA
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('macd')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.macd ? 'bg-pink-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                MACD
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('rsi')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.rsi ? 'bg-purple-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                RSI
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('bollingerBands')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.bollingerBands ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                布林帶
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('volume')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.volume ? 'bg-green-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                成交量
+              </button>
+              <button 
+                onClick={() => handleIndicatorToggle('fibonacci')}
+                className={`px-3 py-1 rounded text-xs md:text-sm ${activeIndicators.fibonacci ? 'bg-indigo-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                斐波那契
+              </button>
             </div>
           </div>
           
           {/* 技術指標分析區域 */}
           <div className="bg-gray-800 p-3 md:p-4 rounded-lg shadow-lg border border-blue-900/20">
             <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-4 text-blue-300">技術指標分析</h3>
-            <div className="space-y-3 md:space-y-4 text-sm md:text-base">
+            
+            <div className="space-y-3 md:space-y-4">
               <TechCard title="艾略特波浪理論">
                 <p>{getWaveAnalysis()}</p>
               </TechCard>
               
-              <TechCard title="市場結構（高點低點識別）">
+              <TechCard title="市場結構 (高點低點識別)">
                 <p>{getMarketStructureAnalysis()}</p>
               </TechCard>
               
@@ -495,96 +615,65 @@ function App() {
               </TechCard>
               
               <TechCard title="ATR動態止損">
-                <p>{getATRStopLossAnalysis()}</p>
+                <p className="whitespace-pre-line">{getATRStopLossAnalysis()}</p>
               </TechCard>
               
               <TechCard title="市場情緒">
-                <p>{getMarketSentimentAnalysis()}</p>
+                <p>{candlestickData.length > 0 ? '市場情緒中性' : '尚未分析'}</p>
               </TechCard>
               
-              <div className="mt-4 md:mt-6 p-3 bg-blue-900/20 rounded border border-blue-800/30">
-                <h4 className="font-medium text-blue-400">綜合建議</h4>
-                <p className="text-gray-300 mt-1">{getOverallRecommendation()}</p>
-              </div>
+              <TechCard title="綜合建議" className="border-l-4 border-blue-500">
+                <p className="font-medium text-lg">{getLatestSignal()}</p>
+                {analysisResult.backtestResult && (
+                  <div className="mt-2 text-sm grid grid-cols-2 gap-2">
+                    <div>勝率: {(analysisResult.backtestResult.winRate * 100).toFixed(1)}%</div>
+                    <div>獲利因子: {analysisResult.backtestResult.profitFactor.toFixed(2)}</div>
+                    <div>最大回撤: {(analysisResult.backtestResult.maxDrawdown * 100).toFixed(1)}%</div>
+                    <div>年化收益: {(analysisResult.backtestResult.annualReturn * 100).toFixed(1)}%</div>
+                  </div>
+                )}
+              </TechCard>
             </div>
           </div>
         </div>
-        
-        {/* 回測結果區域 - 響應式設計 */}
-        <div className="mt-4 md:mt-6 bg-gray-800 p-3 md:p-4 rounded-lg shadow-lg border border-blue-900/20">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-3 md:mb-4">
-            <h3 className="text-base md:text-lg font-semibold text-blue-300 mb-2 md:mb-0">回測結果</h3>
-            <div className="flex space-x-2">
-              <button className="px-3 md:px-4 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm transition-colors">
-                設置參數
-              </button>
-              <button 
-                className="px-3 md:px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs md:text-sm transition-colors"
-                disabled={!candlestickData.length}
-              >
-                開始回測
-              </button>
-            </div>
-          </div>
-          
-          <div className="bg-gray-700 p-3 md:p-4 rounded chart-container">
-            {/* 回測統計卡片 - 響應式設計 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 md:mb-4">
-              <div className="bg-gray-800 p-2 md:p-3 rounded">
-                <div className="text-gray-400 text-xs md:text-sm">勝率</div>
-                <div className="text-base md:text-xl font-semibold text-blue-400">
-                  {analysisResult.backtestResult ? 
-                    `${(analysisResult.backtestResult.winRate * 100).toFixed(2)}%` : 
-                    '--'}
-                </div>
-              </div>
-              <div className="bg-gray-800 p-2 md:p-3 rounded">
-                <div className="text-gray-400 text-xs md:text-sm">盈虧比</div>
-                <div className="text-base md:text-xl font-semibold text-blue-400">
-                  {analysisResult.backtestResult ? 
-                    analysisResult.backtestResult.profitFactor.toFixed(2) : 
-                    '--'}
-                </div>
-              </div>
-              <div className="bg-gray-800 p-2 md:p-3 rounded">
-                <div className="text-gray-400 text-xs md:text-sm">最大回撤</div>
-                <div className="text-base md:text-xl font-semibold text-blue-400">
-                  {analysisResult.backtestResult ? 
-                    `${(analysisResult.backtestResult.maxDrawdown * 100).toFixed(2)}%` : 
-                    '--'}
-                </div>
-              </div>
-              <div className="bg-gray-800 p-2 md:p-3 rounded">
-                <div className="text-gray-400 text-xs md:text-sm">年化收益</div>
-                <div className="text-base md:text-xl font-semibold text-blue-400">
-                  {analysisResult.backtestResult ? 
-                    `${(analysisResult.backtestResult.annualReturn * 100).toFixed(2)}%` : 
-                    '--'}
-                </div>
-              </div>
-            </div>
-            
-            {/* 回測圖表區域 */}
-            <div className="aspect-[3/1] bg-gray-800 rounded flex items-center justify-center">
-              {analysisResult.backtestResult ? (
-                <div className="w-full h-full p-2 md:p-4">
-                  <p className="text-center mb-2 md:mb-4 text-sm md:text-base">回測結果圖表</p>
-                  {/* 這裡可以添加回測結果圖表 */}
-                </div>
-              ) : (
-                <p className="text-gray-400 text-sm md:text-base">請先進行回測以查看結果圖表</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
+      </div>
       
-      {/* 頁腳 - 響應式設計 */}
-      <footer className="bg-gray-800 p-3 md:p-4 mt-6 md:mt-8 border-t border-blue-900/30">
-        <div className="container mx-auto text-center text-gray-400 text-xs md:text-sm">
-          <p>© 2025 專業投資分析平台 | 免責聲明：本網站提供的分析僅供參考，不構成投資建議</p>
-        </div>
+      {/* 頁腳 */}
+      <footer className="bg-gray-800 p-4 mt-8 text-center text-gray-400 text-sm">
+        <p>© 2025 專業投資分析平台 | 免責聲明：本網站提供的分析僅供參考，不構成投資建議</p>
       </footer>
+      
+      {/* 全局樣式 */}
+      <style jsx global>{`
+        .glow-text {
+          text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        
+        .tech-card {
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .tech-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .pulse-button {
+          animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+          }
+          70% {
+            box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          }
+        }
+      `}</style>
     </div>
   );
 }
