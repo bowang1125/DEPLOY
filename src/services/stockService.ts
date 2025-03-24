@@ -25,7 +25,18 @@ export const fetchStockData = async (
   range: string = '6mo'
 ): Promise<StockData | null> => {
   try {
-    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${interval}, 範圍: ${range}`);
+    // 確保時間間隔參數格式正確
+    let adjustedInterval = interval;
+    
+    // 根據Yahoo Finance API的要求格式化interval
+    // 確保格式如 1d, 1h, 15m 等
+    if (!interval.match(/^\d+[dhm]$/)) {
+      // 如果格式不正確，使用默認值
+      console.warn(`時間間隔格式不正確: ${interval}，使用默認值1d`);
+      adjustedInterval = '1d';
+    }
+    
+    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${adjustedInterval}, 範圍: ${range}`);
     
     // 使用多個CORS代理選項，如果一個失敗則嘗試下一個
     const corsProxies = [
@@ -49,7 +60,7 @@ export const fetchStockData = async (
         
         response = await axios.get(fullUrl, {
           params: {
-            interval,
+            interval: adjustedInterval, // 使用調整後的時間間隔
             range,
             includePrePost: false,
             events: 'div,split',
@@ -75,7 +86,7 @@ export const fetchStockData = async (
         console.log('嘗試直接請求，不使用代理');
         response = await axios.get(yahooFinanceUrl, {
           params: {
-            interval,
+            interval: adjustedInterval,
             range,
             includePrePost: false,
             events: 'div,split',
@@ -111,10 +122,16 @@ export const fetchStockData = async (
       return null;
     }
     
+    // 處理時間戳
+    const timestamps = result.timestamp.map(ts => {
+      // 確保時間戳是正確的格式
+      return ts * 1000; // 轉換為毫秒
+    });
+    
     console.log(`成功處理數據，獲取了 ${result.timestamp.length} 個數據點`);
     
     return {
-      timestamp: result.timestamp,
+      timestamp: timestamps,
       open: quotes.open,
       high: quotes.high,
       low: quotes.low,
@@ -136,13 +153,18 @@ export const transformToCandlestickData = (data: StockData): CandlestickData[] =
 
   console.log(`開始轉換蠟燭圖數據，原始數據點數量: ${data.timestamp.length}`);
   
-  const candlestickData = data.timestamp.map((time, index) => ({
-    time: time * 1000, // 確保時間戳是毫秒格式，適用於圖表庫
-    open: data.open[index],
-    high: data.high[index],
-    low: data.low[index],
-    close: data.close[index],
-  })).filter(item => 
+  const candlestickData = data.timestamp.map((time, index) => {
+    // 確保時間是毫秒格式
+    const timeMs = typeof time === 'number' && time < 10000000000 ? time * 1000 : time;
+    
+    return {
+      time: timeMs / 1000, // 轉換為秒，因為圖表庫需要
+      open: data.open[index],
+      high: data.high[index],
+      low: data.low[index],
+      close: data.close[index],
+    };
+  }).filter(item => 
     item.open !== null && 
     item.high !== null && 
     item.low !== null && 
@@ -150,6 +172,7 @@ export const transformToCandlestickData = (data: StockData): CandlestickData[] =
   );
   
   console.log(`轉換完成，有效蠟燭圖數據點數量: ${candlestickData.length}`);
+  console.log('第一個數據點示例:', candlestickData[0]);
   
   return candlestickData;
 };
@@ -218,6 +241,133 @@ export const calculateMA = (data: number[], period: number): number[] => {
   }
   
   return result;
+};
+
+// 計算指數移動平均線 (EMA)
+export const calculateEMA = (data: number[], period: number): number[] => {
+  if (!data || data.length < period) {
+    console.error(`無法計算EMA: 數據點不足，需要至少 ${period} 個點，但只有 ${data?.length || 0} 個點`);
+    return Array(data?.length || 0).fill(null);
+  }
+
+  const result: number[] = [];
+  const multiplier = 2 / (period + 1);
+  
+  // 第一個EMA值使用SMA
+  let ema = data.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
+  
+  // 填充前面的空值
+  for (let i = 0; i < period - 1; i++) {
+    result.push(null as any);
+  }
+  
+  result.push(ema);
+  
+  // 計算剩餘的EMA值
+  for (let i = period; i < data.length; i++) {
+    ema = (data[i] - ema) * multiplier + ema;
+    result.push(ema);
+  }
+  
+  return result;
+};
+
+// 計算MACD
+export const calculateMACD = (
+  closePrices: number[],
+  fastPeriod: number = 12,
+  slowPeriod: number = 26,
+  signalPeriod: number = 9
+): { macd: number[], signal: number[], histogram: number[] } => {
+  if (!closePrices || closePrices.length < Math.max(fastPeriod, slowPeriod) + signalPeriod) {
+    console.error(`無法計算MACD: 數據點不足`);
+    return {
+      macd: Array(closePrices?.length || 0).fill(null),
+      signal: Array(closePrices?.length || 0).fill(null),
+      histogram: Array(closePrices?.length || 0).fill(null)
+    };
+  }
+
+  // 計算快速和慢速EMA
+  const fastEMA = calculateEMA(closePrices, fastPeriod);
+  const slowEMA = calculateEMA(closePrices, slowPeriod);
+  
+  // 計算MACD線 (快速EMA - 慢速EMA)
+  const macdLine: number[] = [];
+  for (let i = 0; i < closePrices.length; i++) {
+    if (i < slowPeriod - 1) {
+      macdLine.push(null as any);
+    } else {
+      macdLine.push(fastEMA[i] - slowEMA[i]);
+    }
+  }
+  
+  // 計算信號線 (MACD的EMA)
+  const validMacd = macdLine.filter(value => value !== null) as number[];
+  const signalLine = calculateEMA(validMacd, signalPeriod);
+  
+  // 填充信號線前面的空值
+  const signalPadding = Array(closePrices.length - signalLine.length).fill(null);
+  const fullSignalLine = [...signalPadding, ...signalLine];
+  
+  // 計算柱狀圖 (MACD線 - 信號線)
+  const histogram: number[] = [];
+  for (let i = 0; i < closePrices.length; i++) {
+    if (macdLine[i] === null || fullSignalLine[i] === null) {
+      histogram.push(null as any);
+    } else {
+      histogram.push(macdLine[i] - fullSignalLine[i]);
+    }
+  }
+  
+  return {
+    macd: macdLine,
+    signal: fullSignalLine,
+    histogram
+  };
+};
+
+// 計算布林帶
+export const calculateBollingerBands = (
+  closePrices: number[],
+  period: number = 20,
+  multiplier: number = 2
+): { upper: number[], middle: number[], lower: number[] } => {
+  if (!closePrices || closePrices.length < period) {
+    console.error(`無法計算布林帶: 數據點不足，需要至少 ${period} 個點，但只有 ${closePrices?.length || 0} 個點`);
+    return {
+      upper: Array(closePrices?.length || 0).fill(null),
+      middle: Array(closePrices?.length || 0).fill(null),
+      lower: Array(closePrices?.length || 0).fill(null)
+    };
+  }
+
+  // 計算中軌 (SMA)
+  const middle = calculateMA(closePrices, period);
+  
+  const upper: number[] = [];
+  const lower: number[] = [];
+  
+  // 計算上軌和下軌
+  for (let i = 0; i < closePrices.length; i++) {
+    if (i < period - 1) {
+      upper.push(null as any);
+      lower.push(null as any);
+      continue;
+    }
+    
+    // 計算標準差
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += Math.pow(closePrices[i - j] - middle[i], 2);
+    }
+    const stdDev = Math.sqrt(sum / period);
+    
+    upper.push(middle[i] + multiplier * stdDev);
+    lower.push(middle[i] - multiplier * stdDev);
+  }
+  
+  return { upper, middle, lower };
 };
 
 // 計算成交量加權移動平均線 (VWAP)
@@ -313,6 +463,67 @@ export const calculateATR = (
   }
   
   return atr;
+};
+
+// 計算斐波那契回調水平
+export const calculateFibonacciLevels = (
+  highPrices: number[],
+  lowPrices: number[],
+  lookbackPeriod: number = 100
+): { levels: { [key: string]: number }, trend: 'up' | 'down' } => {
+  if (!highPrices || !lowPrices || 
+      highPrices.length < lookbackPeriod || lowPrices.length < lookbackPeriod) {
+    console.error(`無法計算斐波那契水平: 數據點不足或格式不正確`);
+    return { 
+      levels: { 
+        '0': 0, 
+        '0.236': 0, 
+        '0.382': 0, 
+        '0.5': 0, 
+        '0.618': 0, 
+        '0.786': 0, 
+        '1': 0 
+      }, 
+      trend: 'up' 
+    };
+  }
+
+  // 獲取回顧期內的最高點和最低點
+  const recentHighs = highPrices.slice(-lookbackPeriod);
+  const recentLows = lowPrices.slice(-lookbackPeriod);
+  
+  const highestPrice = Math.max(...recentHighs);
+  const lowestPrice = Math.min(...recentLows);
+  
+  // 確定趨勢方向
+  const highestIndex = recentHighs.indexOf(highestPrice);
+  const lowestIndex = recentLows.indexOf(lowestPrice);
+  
+  let trend: 'up' | 'down' = 'up';
+  let range = 0;
+  
+  if (highestIndex > lowestIndex) {
+    // 上升趨勢
+    trend = 'up';
+    range = highestPrice - lowestPrice;
+  } else {
+    // 下降趨勢
+    trend = 'down';
+    range = highestPrice - lowestPrice;
+  }
+  
+  // 計算斐波那契水平
+  const levels = {
+    '0': trend === 'up' ? lowestPrice : highestPrice,
+    '0.236': trend === 'up' ? lowestPrice + range * 0.236 : highestPrice - range * 0.236,
+    '0.382': trend === 'up' ? lowestPrice + range * 0.382 : highestPrice - range * 0.382,
+    '0.5': trend === 'up' ? lowestPrice + range * 0.5 : highestPrice - range * 0.5,
+    '0.618': trend === 'up' ? lowestPrice + range * 0.618 : highestPrice - range * 0.618,
+    '0.786': trend === 'up' ? lowestPrice + range * 0.786 : highestPrice - range * 0.786,
+    '1': trend === 'up' ? highestPrice : lowestPrice
+  };
+  
+  return { levels, trend };
 };
 
 // 檢測市場結構（高點低點識別）
