@@ -18,32 +18,147 @@ export interface CandlestickData {
   close: number;
 }
 
-// 獲取股票數據的函數
+// 使用CORS代理來獲取股票數據
 export const fetchStockData = async (
   symbol: string,
   interval: string = '1d',
   range: string = '6mo'
 ): Promise<StockData | null> => {
   try {
-    // 這裡使用Yahoo Finance API
-    // 在實際部署時，應該使用後端API來避免CORS問題
-    const response = await axios.get(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
-      {
-        params: {
-          interval,
+    // 確保時間間隔參數格式正確
+    let adjustedInterval = interval;
+    
+    // 根據Yahoo Finance API的要求格式化interval
+    // 確保格式如 1d, 1h, 15m 等
+    if (!interval.match(/^\d+[dhm]$/)) {
+      console.warn(`時間間隔格式不正確: ${interval}，使用默認值1d`);
+      adjustedInterval = '1d';
+    }
+    
+    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${adjustedInterval}, 範圍: ${range}`);
+    
+    // 使用多個CORS代理選項，如果一個失敗則嘗試下一個
+    const corsProxies = [
+      'https://corsproxy.io/?',
+      'https://api.allorigins.win/raw?url=',
+      'https://cors-anywhere.herokuapp.com/'
+    ];
+    
+    const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+    
+    let response = null;
+    let error = null;
+    
+    // 嘗試每個代理直到成功
+    for (const proxy of corsProxies) {
+      try {
+        console.log(`嘗試使用代理: ${proxy}`);
+        
+        // 構建完整URL
+        const fullUrl = `${proxy}${encodeURIComponent(yahooFinanceUrl)}`;
+        
+        // 關鍵修改：確保interval參數正確傳遞
+        const params = {
+          interval: adjustedInterval, // 使用調整後的時間間隔
           range,
           includePrePost: false,
           events: 'div,split',
-        },
+        };
+        
+        console.log('發送請求參數:', params); // 添加日誌以便調試
+        
+        response = await axios.get(fullUrl, {
+          params,
+          timeout: 10000, // 10秒超時
+        });
+        
+        console.log('成功獲取數據，響應狀態:', response.status);
+        console.log('返回的時間間隔:', response.data?.chart?.result?.[0]?.meta?.dataGranularity || '未知');
+        break; // 如果成功，跳出循環
+      } catch (e) {
+        error = e;
+        console.error(`使用代理 ${proxy} 失敗:`, e);
+        // 繼續嘗試下一個代理
       }
-    );
-
+    }
+    
+    // 如果所有代理都失敗
+    if (!response) {
+      console.error('所有CORS代理都失敗了', error);
+      
+      // 嘗試直接請求（可能會因CORS而失敗，但值得一試）
+      try {
+        console.log('嘗試直接請求，不使用代理');
+        
+        // 關鍵修改：確保interval參數正確傳遞
+        const params = {
+          interval: adjustedInterval,
+          range,
+          includePrePost: false,
+          events: 'div,split',
+        };
+        
+        console.log('直接請求參數:', params);
+        
+        response = await axios.get(yahooFinanceUrl, {
+          params,
+          timeout: 10000,
+        });
+        console.log('直接請求成功');
+      } catch (directError) {
+        console.error('直接請求也失敗了:', directError);
+        return null;
+      }
+    }
+    
+    // 檢查響應數據結構
+    if (!response.data || !response.data.chart || !response.data.chart.result || response.data.chart.result.length === 0) {
+      console.error('API響應格式不正確:', response.data);
+      return null;
+    }
+    
     const result = response.data.chart.result[0];
+    
+    // 檢查是否有必要的數據
+    if (!result.timestamp || !result.indicators || !result.indicators.quote || result.indicators.quote.length === 0) {
+      console.error('API響應中缺少必要的數據:', result);
+      return null;
+    }
+    
     const quotes = result.indicators.quote[0];
-
+    
+    // 檢查數據完整性
+    if (!quotes.open || !quotes.high || !quotes.low || !quotes.close || !quotes.volume) {
+      console.error('API響應中缺少價格數據:', quotes);
+      return null;
+    }
+    
+    // 檢查返回的時間間隔是否與請求的一致
+    const returnedInterval = result.meta?.dataGranularity || 'unknown';
+    console.log(`請求的時間間隔: ${adjustedInterval}, 返回的時間間隔: ${returnedInterval}`);
+    
+    if (returnedInterval !== adjustedInterval) {
+      console.warn(`警告: 返回的時間間隔 (${returnedInterval}) 與請求的時間間隔 (${adjustedInterval}) 不一致`);
+    }
+    
+    // 處理時間戳
+    const timestamps = result.timestamp.map(ts => {
+      // 確保時間戳是正確的格式
+      return ts * 1000; // 轉換為毫秒
+    });
+    
+    console.log(`成功處理數據，獲取了 ${result.timestamp.length} 個數據點`);
+    console.log(`第一個數據點時間: ${new Date(timestamps[0]).toLocaleString()}`);
+    console.log(`最後一個數據點時間: ${new Date(timestamps[timestamps.length - 1]).toLocaleString()}`);
+    
+    // 計算數據點之間的時間間隔（以小時為單位）
+    if (timestamps.length >= 2) {
+      const timeDiff = (timestamps[1] - timestamps[0]) / (1000 * 60 * 60);
+      console.log(`數據點之間的時間間隔: ${timeDiff.toFixed(2)} 小時`);
+    }
+    
     return {
-      timestamp: result.timestamp,
+      timestamp: timestamps,
       open: quotes.open,
       high: quotes.high,
       low: quotes.low,
@@ -51,33 +166,53 @@ export const fetchStockData = async (
       volume: quotes.volume,
     };
   } catch (error) {
-    console.error('Error fetching stock data:', error);
+    console.error('獲取股票數據時出錯:', error);
     return null;
   }
 };
 
 // 將原始數據轉換為蠟燭圖數據格式
 export const transformToCandlestickData = (data: StockData): CandlestickData[] => {
-  if (!data || !data.timestamp) return [];
+  if (!data || !data.timestamp || data.timestamp.length === 0) {
+    console.error('無法轉換為蠟燭圖數據: 數據為空或格式不正確');
+    return [];
+  }
 
-  return data.timestamp.map((time, index) => ({
-    time: time,
-    open: data.open[index],
-    high: data.high[index],
-    low: data.low[index],
-    close: data.close[index],
-  })).filter(item => 
+  console.log(`開始轉換蠟燭圖數據，原始數據點數量: ${data.timestamp.length}`);
+  
+  const candlestickData = data.timestamp.map((time, index) => {
+    // 確保時間是毫秒格式
+    const timeMs = typeof time === 'number' && time < 10000000000 ? time * 1000 : time;
+    
+    return {
+      time: timeMs / 1000, // 轉換為秒，因為圖表庫需要
+      open: data.open[index],
+      high: data.high[index],
+      low: data.low[index],
+      close: data.close[index],
+    };
+  }).filter(item => 
     item.open !== null && 
     item.high !== null && 
     item.low !== null && 
     item.close !== null
   );
+  
+  console.log(`轉換完成，有效蠟燭圖數據點數量: ${candlestickData.length}`);
+  console.log('第一個數據點示例:', candlestickData[0]);
+  
+  return candlestickData;
 };
 
 // 計算技術指標
 
 // 計算相對強弱指數 (RSI)
 export const calculateRSI = (closePrices: number[], period: number = 14): number[] => {
+  if (!closePrices || closePrices.length < period + 1) {
+    console.error(`無法計算RSI: 數據點不足，需要至少 ${period + 1} 個點，但只有 ${closePrices?.length || 0} 個點`);
+    return Array(closePrices?.length || 0).fill(null);
+  }
+
   const rsi: number[] = [];
   const gains: number[] = [];
   const losses: number[] = [];
@@ -112,6 +247,11 @@ export const calculateRSI = (closePrices: number[], period: number = 14): number
 
 // 計算移動平均線 (MA)
 export const calculateMA = (data: number[], period: number): number[] => {
+  if (!data || data.length < period) {
+    console.error(`無法計算MA: 數據點不足，需要至少 ${period} 個點，但只有 ${data?.length || 0} 個點`);
+    return Array(data?.length || 0).fill(null);
+  }
+
   const result: number[] = [];
   
   for (let i = 0; i < data.length; i++) {
@@ -130,6 +270,133 @@ export const calculateMA = (data: number[], period: number): number[] => {
   return result;
 };
 
+// 計算指數移動平均線 (EMA)
+export const calculateEMA = (data: number[], period: number): number[] => {
+  if (!data || data.length < period) {
+    console.error(`無法計算EMA: 數據點不足，需要至少 ${period} 個點，但只有 ${data?.length || 0} 個點`);
+    return Array(data?.length || 0).fill(null);
+  }
+
+  const result: number[] = [];
+  const multiplier = 2 / (period + 1);
+  
+  // 第一個EMA值使用SMA
+  let ema = data.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
+  
+  // 填充前面的空值
+  for (let i = 0; i < period - 1; i++) {
+    result.push(null as any);
+  }
+  
+  result.push(ema);
+  
+  // 計算剩餘的EMA值
+  for (let i = period; i < data.length; i++) {
+    ema = (data[i] - ema) * multiplier + ema;
+    result.push(ema);
+  }
+  
+  return result;
+};
+
+// 計算MACD
+export const calculateMACD = (
+  closePrices: number[],
+  fastPeriod: number = 12,
+  slowPeriod: number = 26,
+  signalPeriod: number = 9
+): { macd: number[], signal: number[], histogram: number[] } => {
+  if (!closePrices || closePrices.length < Math.max(fastPeriod, slowPeriod) + signalPeriod) {
+    console.error(`無法計算MACD: 數據點不足`);
+    return {
+      macd: Array(closePrices?.length || 0).fill(null),
+      signal: Array(closePrices?.length || 0).fill(null),
+      histogram: Array(closePrices?.length || 0).fill(null)
+    };
+  }
+
+  // 計算快速和慢速EMA
+  const fastEMA = calculateEMA(closePrices, fastPeriod);
+  const slowEMA = calculateEMA(closePrices, slowPeriod);
+  
+  // 計算MACD線 (快速EMA - 慢速EMA)
+  const macdLine: number[] = [];
+  for (let i = 0; i < closePrices.length; i++) {
+    if (i < slowPeriod - 1) {
+      macdLine.push(null as any);
+    } else {
+      macdLine.push(fastEMA[i] - slowEMA[i]);
+    }
+  }
+  
+  // 計算信號線 (MACD的EMA)
+  const validMacd = macdLine.filter(value => value !== null) as number[];
+  const signalLine = calculateEMA(validMacd, signalPeriod);
+  
+  // 填充信號線前面的空值
+  const signalPadding = Array(closePrices.length - signalLine.length).fill(null);
+  const fullSignalLine = [...signalPadding, ...signalLine];
+  
+  // 計算柱狀圖 (MACD線 - 信號線)
+  const histogram: number[] = [];
+  for (let i = 0; i < closePrices.length; i++) {
+    if (macdLine[i] === null || fullSignalLine[i] === null) {
+      histogram.push(null as any);
+    } else {
+      histogram.push(macdLine[i] - fullSignalLine[i]);
+    }
+  }
+  
+  return {
+    macd: macdLine,
+    signal: fullSignalLine,
+    histogram
+  };
+};
+
+// 計算布林帶
+export const calculateBollingerBands = (
+  closePrices: number[],
+  period: number = 20,
+  multiplier: number = 2
+): { upper: number[], middle: number[], lower: number[] } => {
+  if (!closePrices || closePrices.length < period) {
+    console.error(`無法計算布林帶: 數據點不足，需要至少 ${period} 個點，但只有 ${closePrices?.length || 0} 個點`);
+    return {
+      upper: Array(closePrices?.length || 0).fill(null),
+      middle: Array(closePrices?.length || 0).fill(null),
+      lower: Array(closePrices?.length || 0).fill(null)
+    };
+  }
+
+  // 計算中軌 (SMA)
+  const middle = calculateMA(closePrices, period);
+  
+  const upper: number[] = [];
+  const lower: number[] = [];
+  
+  // 計算上軌和下軌
+  for (let i = 0; i < closePrices.length; i++) {
+    if (i < period - 1) {
+      upper.push(null as any);
+      lower.push(null as any);
+      continue;
+    }
+    
+    // 計算標準差
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += Math.pow(closePrices[i - j] - middle[i], 2);
+    }
+    const stdDev = Math.sqrt(sum / period);
+    
+    upper.push(middle[i] + multiplier * stdDev);
+    lower.push(middle[i] - multiplier * stdDev);
+  }
+  
+  return { upper, middle, lower };
+};
+
 // 計算成交量加權移動平均線 (VWAP)
 export const calculateVWAP = (
   highPrices: number[],
@@ -138,6 +405,14 @@ export const calculateVWAP = (
   volumes: number[],
   period: number = 14
 ): number[] => {
+  if (!highPrices || !lowPrices || !closePrices || !volumes || 
+      highPrices.length < period || lowPrices.length < period || 
+      closePrices.length < period || volumes.length < period) {
+    console.error(`無法計算VWAP: 數據點不足或格式不正確`);
+    return Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0, 
+                          closePrices?.length || 0, volumes?.length || 0)).fill(null);
+  }
+
   const typicalPrices: number[] = [];
   const vwap: number[] = [];
   
@@ -174,6 +449,12 @@ export const calculateATR = (
   closePrices: number[],
   period: number = 14
 ): number[] => {
+  if (!highPrices || !lowPrices || !closePrices || 
+      highPrices.length < period || lowPrices.length < period || closePrices.length < period) {
+    console.error(`無法計算ATR: 數據點不足或格式不正確`);
+    return Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0, closePrices?.length || 0)).fill(null);
+  }
+
   const trueRanges: number[] = [];
   const atr: number[] = [];
   
@@ -211,12 +492,82 @@ export const calculateATR = (
   return atr;
 };
 
+// 計算斐波那契回調水平
+export const calculateFibonacciLevels = (
+  highPrices: number[],
+  lowPrices: number[],
+  lookbackPeriod: number = 100
+): { levels: { [key: string]: number }, trend: 'up' | 'down' } => {
+  if (!highPrices || !lowPrices || 
+      highPrices.length < lookbackPeriod || lowPrices.length < lookbackPeriod) {
+    console.error(`無法計算斐波那契水平: 數據點不足或格式不正確`);
+    return { 
+      levels: { 
+        '0': 0, 
+        '0.236': 0, 
+        '0.382': 0, 
+        '0.5': 0, 
+        '0.618': 0, 
+        '0.786': 0, 
+        '1': 0 
+      }, 
+      trend: 'up' 
+    };
+  }
+
+  // 獲取回顧期內的最高點和最低點
+  const recentHighs = highPrices.slice(-lookbackPeriod);
+  const recentLows = lowPrices.slice(-lookbackPeriod);
+  
+  const highestPrice = Math.max(...recentHighs);
+  const lowestPrice = Math.min(...recentLows);
+  
+  // 確定趨勢方向
+  const highestIndex = recentHighs.indexOf(highestPrice);
+  const lowestIndex = recentLows.indexOf(lowestPrice);
+  
+  let trend: 'up' | 'down' = 'up';
+  let range = 0;
+  
+  if (highestIndex > lowestIndex) {
+    // 上升趨勢
+    trend = 'up';
+    range = highestPrice - lowestPrice;
+  } else {
+    // 下降趨勢
+    trend = 'down';
+    range = highestPrice - lowestPrice;
+  }
+  
+  // 計算斐波那契水平
+  const levels = {
+    '0': trend === 'up' ? lowestPrice : highestPrice,
+    '0.236': trend === 'up' ? lowestPrice + range * 0.236 : highestPrice - range * 0.236,
+    '0.382': trend === 'up' ? lowestPrice + range * 0.382 : highestPrice - range * 0.382,
+    '0.5': trend === 'up' ? lowestPrice + range * 0.5 : highestPrice - range * 0.5,
+    '0.618': trend === 'up' ? lowestPrice + range * 0.618 : highestPrice - range * 0.618,
+    '0.786': trend === 'up' ? lowestPrice + range * 0.786 : highestPrice - range * 0.786,
+    '1': trend === 'up' ? highestPrice : lowestPrice
+  };
+  
+  return { levels, trend };
+};
+
 // 檢測市場結構（高點低點識別）
 export const identifyMarketStructure = (
   highPrices: number[],
   lowPrices: number[],
   period: number = 10
 ): { highs: number[], lows: number[] } => {
+  if (!highPrices || !lowPrices || 
+      highPrices.length < period * 2 + 1 || lowPrices.length < period * 2 + 1) {
+    console.error(`無法識別市場結構: 數據點不足或格式不正確`);
+    return { 
+      highs: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null),
+      lows: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null)
+    };
+  }
+
   const highs: number[] = Array(highPrices.length).fill(null);
   const lows: number[] = Array(lowPrices.length).fill(null);
   
@@ -261,6 +612,15 @@ export const detectRSIDivergence = (
   rsiValues: number[],
   period: number = 14
 ): { bullishDivergence: boolean[], bearishDivergence: boolean[] } => {
+  if (!closePrices || !rsiValues || 
+      closePrices.length < period * 2 || rsiValues.length < period * 2) {
+    console.error(`無法檢測RSI背離: 數據點不足或格式不正確`);
+    return { 
+      bullishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false),
+      bearishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false)
+    };
+  }
+
   const bullishDivergence: boolean[] = Array(closePrices.length).fill(false);
   const bearishDivergence: boolean[] = Array(closePrices.length).fill(false);
   
@@ -293,6 +653,14 @@ export const generateTradingSignals = (
   marketStructure: { highs: number[], lows: number[] },
   rsiDivergence: { bullishDivergence: boolean[], bearishDivergence: boolean[] }
 ): { buySignals: boolean[], sellSignals: boolean[] } => {
+  if (!closePrices || closePrices.length === 0) {
+    console.error(`無法生成交易信號: 價格數據為空或格式不正確`);
+    return { 
+      buySignals: [],
+      sellSignals: []
+    };
+  }
+
   const buySignals: boolean[] = Array(closePrices.length).fill(false);
   const sellSignals: boolean[] = Array(closePrices.length).fill(false);
   
@@ -341,6 +709,19 @@ export const backtest = (
   maxDrawdown: number;
   annualReturn: number;
 } => {
+  if (!closePrices || !buySignals || !sellSignals || 
+      closePrices.length === 0 || buySignals.length === 0 || sellSignals.length === 0) {
+    console.error(`無法執行回測: 數據為空或格式不正確`);
+    return { 
+      equity: [initialCapital],
+      trades: [],
+      winRate: 0,
+      profitFactor: 0,
+      maxDrawdown: 0,
+      annualReturn: 0
+    };
+  }
+
   const equity: number[] = [initialCapital];
   const trades: { entry: number; exit: number; profit: number; }[] = [];
   
