@@ -35,7 +35,27 @@ export const fetchStockData = async (
       adjustedInterval = '1d';
     }
     
-    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${adjustedInterval}, 範圍: ${range}`);
+    // 根據時間間隔自動調整範圍，確保有足夠的數據點
+    let adjustedRange = range;
+    if (adjustedInterval === '1d') {
+      adjustedRange = '1y'; // 日線圖使用1年數據
+    } else if (adjustedInterval === '1wk') {
+      adjustedRange = '5y'; // 週線圖使用5年數據
+    } else if (adjustedInterval === '1mo') {
+      adjustedRange = 'max'; // 月線圖使用最大範圍
+    }
+    
+    console.log(`開始獲取股票數據: ${symbol}, 時間間隔: ${adjustedInterval}, 範圍: ${adjustedRange}`);
+    
+    // 處理台股代碼格式
+    let adjustedSymbol = symbol;
+    if (!symbol.includes('.') && !symbol.includes('-')) {
+      // 如果是純數字代碼，且沒有包含點號或連字符，可能是台股代碼
+      if (/^\d+$/.test(symbol)) {
+        adjustedSymbol = `${symbol}.TW`;
+        console.log(`檢測到可能是台股代碼，調整為: ${adjustedSymbol}`);
+      }
+    }
     
     // 使用多個CORS代理選項，如果一個失敗則嘗試下一個
     const corsProxies = [
@@ -44,7 +64,7 @@ export const fetchStockData = async (
       'https://cors-anywhere.herokuapp.com/'
     ];
     
-    const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+    const yahooFinanceUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${adjustedSymbol}`;
     
     let response = null;
     let error = null;
@@ -57,24 +77,32 @@ export const fetchStockData = async (
         // 構建完整URL
         const fullUrl = `${proxy}${encodeURIComponent(yahooFinanceUrl)}`;
         
-        // 關鍵修改：確保interval參數正確傳遞
+        // 關鍵修改：確保interval和range參數正確傳遞
         const params = {
-          interval: adjustedInterval, // 使用調整後的時間間隔
-          range,
+          interval: adjustedInterval,
+          range: adjustedRange,
           includePrePost: false,
           events: 'div,split',
         };
         
-        console.log('發送請求參數:', params); // 添加日誌以便調試
+        console.log('發送請求參數:', params);
         
         response = await axios.get(fullUrl, {
           params,
-          timeout: 10000, // 10秒超時
+          timeout: 15000, // 增加超時時間到15秒
         });
         
         console.log('成功獲取數據，響應狀態:', response.status);
-        console.log('返回的時間間隔:', response.data?.chart?.result?.[0]?.meta?.dataGranularity || '未知');
-        break; // 如果成功，跳出循環
+        
+        // 檢查是否有數據
+        if (response.data && response.data.chart && 
+            response.data.chart.result && 
+            response.data.chart.result.length > 0) {
+          break; // 如果成功獲取有效數據，跳出循環
+        } else {
+          console.warn('API響應中沒有有效數據，嘗試下一個代理');
+          continue;
+        }
       } catch (e) {
         error = e;
         console.error(`使用代理 ${proxy} 失敗:`, e);
@@ -82,27 +110,23 @@ export const fetchStockData = async (
       }
     }
     
-    // 如果所有代理都失敗
-    if (!response) {
-      console.error('所有CORS代理都失敗了', error);
+    // 如果所有代理都失敗，嘗試直接請求
+    if (!response || !response.data || !response.data.chart || 
+        !response.data.chart.result || response.data.chart.result.length === 0) {
+      console.error('所有CORS代理都失敗了或返回無效數據', error);
       
       // 嘗試直接請求（可能會因CORS而失敗，但值得一試）
       try {
         console.log('嘗試直接請求，不使用代理');
         
-        // 關鍵修改：確保interval參數正確傳遞
-        const params = {
-          interval: adjustedInterval,
-          range,
-          includePrePost: false,
-          events: 'div,split',
-        };
-        
-        console.log('直接請求參數:', params);
-        
         response = await axios.get(yahooFinanceUrl, {
-          params,
-          timeout: 10000,
+          params: {
+            interval: adjustedInterval,
+            range: adjustedRange,
+            includePrePost: false,
+            events: 'div,split',
+          },
+          timeout: 15000,
         });
         console.log('直接請求成功');
       } catch (directError) {
@@ -147,14 +171,17 @@ export const fetchStockData = async (
       return ts * 1000; // 轉換為毫秒
     });
     
-    console.log(`成功處理數據，獲取了 ${result.timestamp.length} 個數據點`);
-    console.log(`第一個數據點時間: ${new Date(timestamps[0]).toLocaleString()}`);
-    console.log(`最後一個數據點時間: ${new Date(timestamps[timestamps.length - 1]).toLocaleString()}`);
+    console.log(`成功處理數據，獲取了 ${timestamps.length} 個數據點`);
     
-    // 計算數據點之間的時間間隔（以小時為單位）
-    if (timestamps.length >= 2) {
-      const timeDiff = (timestamps[1] - timestamps[0]) / (1000 * 60 * 60);
-      console.log(`數據點之間的時間間隔: ${timeDiff.toFixed(2)} 小時`);
+    if (timestamps.length > 0) {
+      console.log(`第一個數據點時間: ${new Date(timestamps[0]).toLocaleString()}`);
+      console.log(`最後一個數據點時間: ${new Date(timestamps[timestamps.length - 1]).toLocaleString()}`);
+      
+      // 計算數據點之間的時間間隔（以小時為單位）
+      if (timestamps.length >= 2) {
+        const timeDiff = (timestamps[1] - timestamps[0]) / (1000 * 60 * 60);
+        console.log(`數據點之間的時間間隔: ${timeDiff.toFixed(2)} 小時`);
+      }
     }
     
     let processedData = {
@@ -169,6 +196,62 @@ export const fetchStockData = async (
     // 如果返回的時間間隔與請求的不一致，進行數據聚合
     if (returnedInterval !== adjustedInterval) {
       console.log(`檢測到時間間隔不匹配，將 ${returnedInterval} 數據聚合為 ${adjustedInterval} 數據`);
+      
+      // 如果請求的是日線但返回的是分鐘級數據，嘗試重新請求日線數據
+      if (adjustedInterval === '1d' && returnedInterval === '1m') {
+        try {
+          console.log('嘗試直接請求日線數據');
+          
+          // 使用第一個代理嘗試請求日線數據
+          const dailyUrl = `${corsProxies[0]}${encodeURIComponent(yahooFinanceUrl)}`;
+          
+          const dailyResponse = await axios.get(dailyUrl, {
+            params: {
+              interval: '1d',
+              range: '1y',
+              includePrePost: false,
+              events: 'div,split',
+            },
+            timeout: 15000,
+          });
+          
+          if (dailyResponse.data && dailyResponse.data.chart && 
+              dailyResponse.data.chart.result && 
+              dailyResponse.data.chart.result.length > 0) {
+            
+            const dailyResult = dailyResponse.data.chart.result[0];
+            
+            if (dailyResult.timestamp && dailyResult.indicators && 
+                dailyResult.indicators.quote && dailyResult.indicators.quote.length > 0) {
+              
+              const dailyQuotes = dailyResult.indicators.quote[0];
+              
+              if (dailyQuotes.open && dailyQuotes.high && dailyQuotes.low && 
+                  dailyQuotes.close && dailyQuotes.volume) {
+                
+                const dailyTimestamps = dailyResult.timestamp.map(ts => ts * 1000);
+                
+                console.log(`成功獲取日線數據，共 ${dailyTimestamps.length} 個數據點`);
+                
+                return {
+                  timestamp: dailyTimestamps,
+                  open: dailyQuotes.open,
+                  high: dailyQuotes.high,
+                  low: dailyQuotes.low,
+                  close: dailyQuotes.close,
+                  volume: dailyQuotes.volume,
+                };
+              }
+            }
+          }
+          
+          console.warn('直接請求日線數據失敗或返回無效數據，回退到數據聚合');
+        } catch (error) {
+          console.error('直接請求日線數據失敗，回退到數據聚合', error);
+        }
+      }
+      
+      // 如果重新請求失敗或不是日線圖，則進行數據聚合
       processedData = aggregateData(processedData, returnedInterval, adjustedInterval);
     }
     
@@ -241,11 +324,14 @@ const aggregateToDaily = (data: StockData): StockData => {
   // 將時間戳轉換為日期字符串（僅保留年月日）
   const dateStrings = data.timestamp.map(ts => {
     const date = new Date(ts);
-    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   });
 
   // 找出唯一的日期
   const uniqueDates = [...new Set(dateStrings)];
+  
+  console.log(`原始數據點數量: ${data.timestamp.length}, 唯一日期數量: ${uniqueDates.length}`);
+  console.log('唯一日期示例:', uniqueDates.slice(0, 5));
   
   // 對每個唯一日期聚合數據
   uniqueDates.forEach(dateStr => {
@@ -282,6 +368,13 @@ const aggregateToDaily = (data: StockData): StockData => {
   });
 
   console.log(`已將 ${data.timestamp.length} 個數據點聚合為 ${dailyData.timestamp.length} 個日線數據點`);
+  
+  // 驗證聚合後的數據
+  if (dailyData.timestamp.length < 2) {
+    console.warn('聚合後數據點不足，返回原始數據');
+    return data;
+  }
+  
   return dailyData;
 };
 
@@ -306,11 +399,14 @@ const aggregateToWeekly = (data: StockData): StockData => {
     const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
     const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
     const weekNumber = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-    return `${date.getFullYear()}-W${weekNumber}`;
+    return `${date.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
   });
 
   // 找出唯一的週
   const uniqueWeeks = [...new Set(weekIdentifiers)];
+  
+  console.log(`原始數據點數量: ${data.timestamp.length}, 唯一週數量: ${uniqueWeeks.length}`);
+  console.log('唯一週示例:', uniqueWeeks.slice(0, 5));
   
   // 對每個唯一週聚合數據
   uniqueWeeks.forEach(weekId => {
@@ -347,6 +443,13 @@ const aggregateToWeekly = (data: StockData): StockData => {
   });
 
   console.log(`已將 ${data.timestamp.length} 個數據點聚合為 ${weeklyData.timestamp.length} 個週線數據點`);
+  
+  // 驗證聚合後的數據
+  if (weeklyData.timestamp.length < 2) {
+    console.warn('聚合後數據點不足，返回原始數據');
+    return data;
+  }
+  
   return weeklyData;
 };
 
@@ -368,11 +471,14 @@ const aggregateToMonthly = (data: StockData): StockData => {
   // 將時間戳轉換為月標識（年份-月份）
   const monthIdentifiers = data.timestamp.map(ts => {
     const date = new Date(ts);
-    return `${date.getFullYear()}-${date.getMonth() + 1}`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   });
 
   // 找出唯一的月份
   const uniqueMonths = [...new Set(monthIdentifiers)];
+  
+  console.log(`原始數據點數量: ${data.timestamp.length}, 唯一月份數量: ${uniqueMonths.length}`);
+  console.log('唯一月份示例:', uniqueMonths.slice(0, 5));
   
   // 對每個唯一月份聚合數據
   uniqueMonths.forEach(monthId => {
@@ -409,6 +515,13 @@ const aggregateToMonthly = (data: StockData): StockData => {
   });
 
   console.log(`已將 ${data.timestamp.length} 個數據點聚合為 ${monthlyData.timestamp.length} 個月線數據點`);
+  
+  // 驗證聚合後的數據
+  if (monthlyData.timestamp.length < 2) {
+    console.warn('聚合後數據點不足，返回原始數據');
+    return data;
+  }
+  
   return monthlyData;
 };
 
@@ -445,6 +558,8 @@ const aggregateToHourly = (data: StockData, hours: number): StockData => {
     currentStart += interval;
   }
   
+  console.log(`原始數據點數量: ${data.timestamp.length}, 時間段數量: ${timeSlots.length}`);
+  
   // 對每個時間段聚合數據
   timeSlots.forEach(slot => {
     // 找出屬於當前時間段的所有數據點索引
@@ -480,6 +595,13 @@ const aggregateToHourly = (data: StockData, hours: number): StockData => {
   });
 
   console.log(`已將 ${data.timestamp.length} 個數據點聚合為 ${hourlyData.timestamp.length} 個 ${hours} 小時線數據點`);
+  
+  // 驗證聚合後的數據
+  if (hourlyData.timestamp.length < 2) {
+    console.warn('聚合後數據點不足，返回原始數據');
+    return data;
+  }
+  
   return hourlyData;
 };
 
@@ -511,7 +633,11 @@ export const transformToCandlestickData = (data: StockData): CandlestickData[] =
   );
   
   console.log(`轉換完成，有效蠟燭圖數據點數量: ${candlestickData.length}`);
-  console.log('第一個數據點示例:', candlestickData[0]);
+  
+  if (candlestickData.length > 0) {
+    console.log('第一個數據點示例:', candlestickData[0]);
+    console.log('最後一個數據點示例:', candlestickData[candlestickData.length - 1]);
+  }
   
   return candlestickData;
 };
@@ -802,309 +928,4 @@ export const calculateATR = (
   }
   
   return atr;
-};
-
-// 計算斐波那契回調水平
-export const calculateFibonacciLevels = (
-  highPrices: number[],
-  lowPrices: number[],
-  lookbackPeriod: number = 100
-): { levels: { [key: string]: number }, trend: 'up' | 'down' } => {
-  if (!highPrices || !lowPrices || 
-      highPrices.length < lookbackPeriod || lowPrices.length < lookbackPeriod) {
-    console.error(`無法計算斐波那契水平: 數據點不足或格式不正確`);
-    return { 
-      levels: { 
-        '0': 0, 
-        '0.236': 0, 
-        '0.382': 0, 
-        '0.5': 0, 
-        '0.618': 0, 
-        '0.786': 0, 
-        '1': 0 
-      }, 
-      trend: 'up' 
-    };
-  }
-
-  // 獲取回顧期內的最高點和最低點
-  const recentHighs = highPrices.slice(-lookbackPeriod);
-  const recentLows = lowPrices.slice(-lookbackPeriod);
-  
-  const highestPrice = Math.max(...recentHighs);
-  const lowestPrice = Math.min(...recentLows);
-  
-  // 確定趨勢方向
-  const highestIndex = recentHighs.indexOf(highestPrice);
-  const lowestIndex = recentLows.indexOf(lowestPrice);
-  
-  let trend: 'up' | 'down' = 'up';
-  let range = 0;
-  
-  if (highestIndex > lowestIndex) {
-    // 上升趨勢
-    trend = 'up';
-    range = highestPrice - lowestPrice;
-  } else {
-    // 下降趨勢
-    trend = 'down';
-    range = highestPrice - lowestPrice;
-  }
-  
-  // 計算斐波那契水平
-  const levels = {
-    '0': trend === 'up' ? lowestPrice : highestPrice,
-    '0.236': trend === 'up' ? lowestPrice + range * 0.236 : highestPrice - range * 0.236,
-    '0.382': trend === 'up' ? lowestPrice + range * 0.382 : highestPrice - range * 0.382,
-    '0.5': trend === 'up' ? lowestPrice + range * 0.5 : highestPrice - range * 0.5,
-    '0.618': trend === 'up' ? lowestPrice + range * 0.618 : highestPrice - range * 0.618,
-    '0.786': trend === 'up' ? lowestPrice + range * 0.786 : highestPrice - range * 0.786,
-    '1': trend === 'up' ? highestPrice : lowestPrice
-  };
-  
-  return { levels, trend };
-};
-
-// 檢測市場結構（高點低點識別）
-export const identifyMarketStructure = (
-  highPrices: number[],
-  lowPrices: number[],
-  period: number = 10
-): { highs: number[], lows: number[] } => {
-  if (!highPrices || !lowPrices || 
-      highPrices.length < period * 2 + 1 || lowPrices.length < period * 2 + 1) {
-    console.error(`無法識別市場結構: 數據點不足或格式不正確`);
-    return { 
-      highs: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null),
-      lows: Array(Math.max(highPrices?.length || 0, lowPrices?.length || 0)).fill(null)
-    };
-  }
-
-  const highs: number[] = Array(highPrices.length).fill(null);
-  const lows: number[] = Array(lowPrices.length).fill(null);
-  
-  // 識別高點
-  for (let i = period; i < highPrices.length - period; i++) {
-    let isHigh = true;
-    
-    for (let j = 1; j <= period; j++) {
-      if (highPrices[i] <= highPrices[i - j] || highPrices[i] <= highPrices[i + j]) {
-        isHigh = false;
-        break;
-      }
-    }
-    
-    if (isHigh) {
-      highs[i] = highPrices[i];
-    }
-  }
-  
-  // 識別低點
-  for (let i = period; i < lowPrices.length - period; i++) {
-    let isLow = true;
-    
-    for (let j = 1; j <= period; j++) {
-      if (lowPrices[i] >= lowPrices[i - j] || lowPrices[i] >= lowPrices[i + j]) {
-        isLow = false;
-        break;
-      }
-    }
-    
-    if (isLow) {
-      lows[i] = lowPrices[i];
-    }
-  }
-  
-  return { highs, lows };
-};
-
-// 檢測RSI背離
-export const detectRSIDivergence = (
-  closePrices: number[],
-  rsiValues: number[],
-  period: number = 14
-): { bullishDivergence: boolean[], bearishDivergence: boolean[] } => {
-  if (!closePrices || !rsiValues || 
-      closePrices.length < period * 2 || rsiValues.length < period * 2) {
-    console.error(`無法檢測RSI背離: 數據點不足或格式不正確`);
-    return { 
-      bullishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false),
-      bearishDivergence: Array(Math.max(closePrices?.length || 0, rsiValues?.length || 0)).fill(false)
-    };
-  }
-
-  const bullishDivergence: boolean[] = Array(closePrices.length).fill(false);
-  const bearishDivergence: boolean[] = Array(closePrices.length).fill(false);
-  
-  // 從RSI值開始的位置開始檢測（前面有null值）
-  for (let i = period * 2; i < closePrices.length; i++) {
-    // 檢測看跌背離（價格創新高但RSI未創新高）
-    if (closePrices[i] > closePrices[i - period] && 
-        rsiValues[i] < rsiValues[i - period] && 
-        rsiValues[i] > 70) {
-      bearishDivergence[i] = true;
-    }
-    
-    // 檢測看漲背離（價格創新低但RSI未創新低）
-    if (closePrices[i] < closePrices[i - period] && 
-        rsiValues[i] > rsiValues[i - period] && 
-        rsiValues[i] < 30) {
-      bullishDivergence[i] = true;
-    }
-  }
-  
-  return { bullishDivergence, bearishDivergence };
-};
-
-// 生成交易信號
-export const generateTradingSignals = (
-  closePrices: number[],
-  rsiValues: number[],
-  vwapValues: number[],
-  atrValues: number[],
-  marketStructure: { highs: number[], lows: number[] },
-  rsiDivergence: { bullishDivergence: boolean[], bearishDivergence: boolean[] }
-): { buySignals: boolean[], sellSignals: boolean[] } => {
-  if (!closePrices || closePrices.length === 0) {
-    console.error(`無法生成交易信號: 價格數據為空或格式不正確`);
-    return { 
-      buySignals: [],
-      sellSignals: []
-    };
-  }
-
-  const buySignals: boolean[] = Array(closePrices.length).fill(false);
-  const sellSignals: boolean[] = Array(closePrices.length).fill(false);
-  
-  for (let i = 30; i < closePrices.length; i++) {
-    // 買入信號條件
-    const buyConditions = [
-      rsiValues[i] !== null && rsiValues[i] < 30, // RSI超賣
-      rsiDivergence.bullishDivergence[i], // RSI看漲背離
-      marketStructure.lows[i] !== null, // 市場結構低點
-      vwapValues[i] !== null && closePrices[i] > vwapValues[i], // 價格在VWAP上方
-    ];
-    
-    // 賣出信號條件
-    const sellConditions = [
-      rsiValues[i] !== null && rsiValues[i] > 70, // RSI超買
-      rsiDivergence.bearishDivergence[i], // RSI看跌背離
-      marketStructure.highs[i] !== null, // 市場結構高點
-      vwapValues[i] !== null && closePrices[i] < vwapValues[i], // 價格在VWAP下方
-    ];
-    
-    // 如果滿足至少兩個買入條件，生成買入信號
-    if (buyConditions.filter(Boolean).length >= 2) {
-      buySignals[i] = true;
-    }
-    
-    // 如果滿足至少兩個賣出條件，生成賣出信號
-    if (sellConditions.filter(Boolean).length >= 2) {
-      sellSignals[i] = true;
-    }
-  }
-  
-  return { buySignals, sellSignals };
-};
-
-// 回測函數
-export const backtest = (
-  closePrices: number[],
-  buySignals: boolean[],
-  sellSignals: boolean[],
-  initialCapital: number = 10000
-): {
-  equity: number[];
-  trades: { entry: number; exit: number; profit: number; }[];
-  winRate: number;
-  profitFactor: number;
-  maxDrawdown: number;
-  annualReturn: number;
-} => {
-  if (!closePrices || !buySignals || !sellSignals || 
-      closePrices.length === 0 || buySignals.length === 0 || sellSignals.length === 0) {
-    console.error(`無法執行回測: 數據為空或格式不正確`);
-    return { 
-      equity: [initialCapital],
-      trades: [],
-      winRate: 0,
-      profitFactor: 0,
-      maxDrawdown: 0,
-      annualReturn: 0
-    };
-  }
-
-  const equity: number[] = [initialCapital];
-  const trades: { entry: number; exit: number; profit: number; }[] = [];
-  
-  let inPosition = false;
-  let entryPrice = 0;
-  let entryIndex = 0;
-  
-  // 模擬交易
-  for (let i = 0; i < closePrices.length; i++) {
-    // 更新權益曲線
-    equity.push(equity[equity.length - 1]);
-    
-    // 買入信號且不在倉位中
-    if (buySignals[i] && !inPosition) {
-      inPosition = true;
-      entryPrice = closePrices[i];
-      entryIndex = i;
-    }
-    // 賣出信號且在倉位中
-    else if ((sellSignals[i] || i === closePrices.length - 1) && inPosition) {
-      inPosition = false;
-      const exitPrice = closePrices[i];
-      const profit = exitPrice - entryPrice;
-      const profitPercent = profit / entryPrice;
-      
-      // 更新權益
-      equity[equity.length - 1] = equity[equity.length - 1] * (1 + profitPercent);
-      
-      // 記錄交易
-      trades.push({
-        entry: entryPrice,
-        exit: exitPrice,
-        profit: profitPercent * 100, // 轉換為百分比
-      });
-    }
-  }
-  
-  // 計算績效指標
-  const winningTrades = trades.filter(trade => trade.profit > 0);
-  const losingTrades = trades.filter(trade => trade.profit <= 0);
-  
-  const winRate = trades.length > 0 ? winningTrades.length / trades.length : 0;
-  
-  const totalProfit = winningTrades.reduce((sum, trade) => sum + trade.profit, 0);
-  const totalLoss = Math.abs(losingTrades.reduce((sum, trade) => sum + trade.profit, 0));
-  const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
-  
-  // 計算最大回撤
-  let maxDrawdown = 0;
-  let peak = equity[0];
-  
-  for (const value of equity) {
-    if (value > peak) {
-      peak = value;
-    }
-    
-    const drawdown = (peak - value) / peak;
-    maxDrawdown = Math.max(maxDrawdown, drawdown);
-  }
-  
-  // 計算年化收益率（假設250個交易日/年）
-  const totalReturn = (equity[equity.length - 1] - initialCapital) / initialCapital;
-  const years = closePrices.length / 250;
-  const annualReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
-  
-  return {
-    equity,
-    trades,
-    winRate,
-    profitFactor,
-    maxDrawdown,
-    annualReturn,
-  };
 };
